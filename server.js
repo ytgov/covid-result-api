@@ -89,19 +89,26 @@ app.put('/test-result', (req, res) => {
   const lastName = body.lastName;
 
   db.raw(`
-    SELECT *
+    SELECT TOP 1 *
       FROM dbo.CovidTestResults
       WHERE dbo.CovidTestResults.HCN = '${healthCareNumber}' AND
         dbo.CovidTestResults.DOB = '${dob}' AND
-        dbo.CovidTestResults.LastName = '${lastName.toUpperCase()}';`)
+        dbo.CovidTestResults.LastName = '${lastName.toUpperCase()}'
+        ORDER BY dbo.CovidTestResults.CollectionDateTime DESC;`)
     .then(rows => {
       if (rows.length == 0) { 
         res.status(404).send("No matching result found for testee token fields");
         return
       }
+
       const result = rows[0];
+      if( result.Result === null || (result.Result && result.Result.indexOf('Negative') < 0)){
+        res.status(204).send("The test result is not yet ready.");
+        return
+      }
+
       const responseBody = {
-        "patientName": result.PatientName.replace(',', ' ').trim().toLowerCase().replace(/\w\S*/g, (w) => (w.replace(/^\w/, (c) => c.toUpperCase()))),
+        "patientName": result.PatientName.trim().toLowerCase().replace(/\w\S*/g, (w) => (w.replace(/^\w/, (c) => c.toUpperCase()))),
         // "lastName": result.lastName,
         "birthDate": result.DOB.substring(0, 4) + "-" + result.DOB.substring(4, 6) + '-' + result.DOB.substring(6, result.DOB.length),
         // "specimenCollected": "Nasopharyngeal swab",
