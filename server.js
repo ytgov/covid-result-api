@@ -34,6 +34,25 @@ var open = require('sqlite').open;
     }
   );
 
+  // Record delivery of Negative test results, as well as the status of the
+  // submittedOnBehalf flag.
+  await db.run(`CREATE TABLE IF NOT EXISTS viewed_result (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    viewedTime text,
+    submittedOnBehalf integer,
+    specimenId text)`,
+    (err) => {
+      if (err) {
+        console.log("🚀 ----------------------------------------")
+        console.log("🚀 ~ file: server.js ~ line 43 ~ err", err)
+        console.log("🚀 ----------------------------------------")
+        // Table already created
+      } else {
+        // Table just created, creating some rows
+      }
+    }
+  );
+
 })();
 
 
