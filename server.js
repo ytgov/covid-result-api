@@ -122,9 +122,9 @@ app.put('/test-result', (req, res) => {
         return
       }
 
+      const result = rows[0];
       const testResult = result.Result.trim();
 
-      const result = rows[0];
       if( result.Result === null || !(testResult === 'Negative' || testResult === 'Negative.')){
         res.status(204).send("The test result is not yet ready.");
         return
