@@ -38,9 +38,9 @@ var open = require('sqlite').open;
   // submittedOnBehalf flag.
   await db.run(`CREATE TABLE IF NOT EXISTS viewed_result (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    viewedTime text,
+    viewedTime timestamp DATE DEFAULT (DATETIME('now')),
     submittedOnBehalf integer,
-    specimenId text)`,
+    specimenId integer)`,
     (err) => {
       if (err) {
         console.log("🚀 ----------------------------------------")
@@ -106,9 +106,10 @@ app.put('/test-result', (req, res) => {
   const healthCareNumber = body.healthCareNumber.replace(/-/g, '');
   const dob = body.birthDate.replace(/-/g, '');
   const lastName = body.lastName;
+  const submittedOnBehalf = body.submittedOnBehalf;
 
   db.raw(`
-    SELECT  TOP 1  PatientName, DOB, CollectionDateTime, ResultedDateTime, Result
+    SELECT  TOP 1  PatientName, DOB, CollectionDateTime, ResultedDateTime, Result, SpecimenID
     FROM    dbo.CovidTestResults
     WHERE   HCN = '${healthCareNumber}'
     AND     DOB = '${dob}'
@@ -120,20 +121,32 @@ app.put('/test-result', (req, res) => {
         return
       }
 
+      const testResult = result.Result.trim();
+
       const result = rows[0];
-      if( result.Result === null || (result.Result && result.Result.indexOf('Negative') < 0)){
+      if( result.Result === null || !(testResult === 'Negative' || testResult === 'Negative.')){
         res.status(204).send("The test result is not yet ready.");
         return
       }
 
+      // Record the delivery of the Negative result, including the opaque Specimen ID.
+      (async () => {
+        const db = await open({
+          filename: './database.db',
+          driver: sqlite3.Database
+        })
+
+        let insert = 'INSERT INTO viewed_result (submittedOnBehalf, specimenId) VALUES (?,?)';
+        const result = await db.run(insert, [(submittedOnBehalf ? 1 : 0), result.SpecimenID]);
+        console.log("🚀 ~ file: server.js ~ INSERT INTO viewed_result ~ result", result);
+      })();
+
       const responseBody = {
         "patientName": result.PatientName.trim().toLowerCase().replace(/\w\S*/g, (w) => (w.replace(/^\w/, (c) => c.toUpperCase()))),
-        // "lastName": result.lastName,
         "birthDate": result.DOB.substring(0, 4) + "-" + result.DOB.substring(4, 6) + '-' + result.DOB.substring(6, result.DOB.length),
-        // "specimenCollected": "Nasopharyngeal swab",
         "collectionTimestamp": result.CollectionDateTime,
         "resultEnteredTimestamp": result.ResultedDateTime,
-        "result": result.Result
+        "result": 'Negative',
       }
 
       res.json(responseBody);
