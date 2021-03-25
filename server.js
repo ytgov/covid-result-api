@@ -119,43 +119,42 @@ app.put('/test-result', (req, res) => {
     .then(rows => {
       if (rows.length === 0) {
         res.status(404).send("No matching result found for testee token fields");
-        return
+        return;
       }
 
       const result = rows[0];
-      const testResult = result.Result.trim();
 
-      if( result.Result === null || !(testResult === 'Negative' || testResult === 'Negative.')){
-        res.status(204).send("The test result is not yet ready.");
-        return
+      if (result.Result && /^Negative\.?$/.test(String(result.Result).trim())) {
+        // Record the delivery of the Negative result, including the opaque Specimen ID.
+        (async () => {
+          const db = await open({
+            filename: './database.db',
+            driver: sqlite3.Database
+          })
+
+          let dbInsert = 'INSERT INTO viewed_result (submittedOnBehalf, specimenId) VALUES (?,?)';
+          const dbInsertResult = await db.run(dbInsert, [(submittedOnBehalf ? 1 : 0), result.SpecimenID]);
+          console.log("🚀 ~ file: server.js ~ INSERT INTO viewed_result ~ result", dbInsertResult);
+
+          // Data retention period is 1 year.
+          let dbDelete = "DELETE FROM viewed_result WHERE viewedTime < DATE('now', '-1 year')";
+          const dbDeleteResult = await db.run(dbDelete);
+          console.log("🚀 ~ file: server.js ~ DELETE FROM viewed_result ~ result", dbDeleteResult);
+        })();
+
+        const responseBody = {
+          "patientName": result.PatientName.trim().toLowerCase().replace(/\w\S*/g, (w) => (w.replace(/^\w/, (c) => c.toUpperCase()))),
+          "birthDate": result.DOB.substring(0, 4) + "-" + result.DOB.substring(4, 6) + '-' + result.DOB.substring(6, result.DOB.length),
+          "collectionTimestamp": result.CollectionDateTime,
+          "resultEnteredTimestamp": result.ResultedDateTime,
+          "result": 'Negative',
+        }
+
+        res.status(200).json(responseBody);
+        return;
       }
 
-      // Record the delivery of the Negative result, including the opaque Specimen ID.
-      (async () => {
-        const db = await open({
-          filename: './database.db',
-          driver: sqlite3.Database
-        })
-
-        let dbInsert = 'INSERT INTO viewed_result (submittedOnBehalf, specimenId) VALUES (?,?)';
-        const dbInsertResult = await db.run(dbInsert, [(submittedOnBehalf ? 1 : 0), result.SpecimenID]);
-        console.log("🚀 ~ file: server.js ~ INSERT INTO viewed_result ~ result", dbInsertResult);
-
-        // Data retention period is 1 year.
-        let dbDelete = "DELETE FROM viewed_result WHERE viewedTime < DATE('now', '-1 year')";
-        const dbDeleteResult = await db.run(dbDelete);
-        console.log("🚀 ~ file: server.js ~ DELETE FROM viewed_result ~ result", dbDeleteResult);
-      })();
-
-      const responseBody = {
-        "patientName": result.PatientName.trim().toLowerCase().replace(/\w\S*/g, (w) => (w.replace(/^\w/, (c) => c.toUpperCase()))),
-        "birthDate": result.DOB.substring(0, 4) + "-" + result.DOB.substring(4, 6) + '-' + result.DOB.substring(6, result.DOB.length),
-        "collectionTimestamp": result.CollectionDateTime,
-        "resultEnteredTimestamp": result.ResultedDateTime,
-        "result": 'Negative',
-      }
-
-      res.json(responseBody);
+      res.status(204).send("The test result is not yet ready.");
     })
     .catch((e) => {
       console.error(e);
