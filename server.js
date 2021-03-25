@@ -19,6 +19,7 @@ var open = require('sqlite').open;
 
   await db.run(`CREATE TABLE IF NOT EXISTS to_notify (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    requestTime timestamp DATE DEFAULT (DATETIME('now')),
     preferredLanguage text, 
     notificationTelephone text, 
     specimenId text)`,
@@ -136,9 +137,14 @@ app.put('/test-result', (req, res) => {
           driver: sqlite3.Database
         })
 
-        let insert = 'INSERT INTO viewed_result (submittedOnBehalf, specimenId) VALUES (?,?)';
-        const result = await db.run(insert, [(submittedOnBehalf ? 1 : 0), result.SpecimenID]);
-        console.log("🚀 ~ file: server.js ~ INSERT INTO viewed_result ~ result", result);
+        let dbInsert = 'INSERT INTO viewed_result (submittedOnBehalf, specimenId) VALUES (?,?)';
+        const dbInsertResult = await db.run(dbInsert, [(submittedOnBehalf ? 1 : 0), result.SpecimenID]);
+        console.log("🚀 ~ file: server.js ~ INSERT INTO viewed_result ~ result", dbInsertResult);
+
+        // Data retention period is 1 year.
+        let dbDelete = "DELETE FROM viewed_result WHERE viewedTime < DATE('now', '-1 year')";
+        const dbDeleteResult = await db.run(dbDelete);
+        console.log("🚀 ~ file: server.js ~ DELETE FROM viewed_result ~ result", dbDeleteResult);
       })();
 
       const responseBody = {
@@ -191,13 +197,16 @@ app.put('/notification-request', async (req, res) => {
           driver: sqlite3.Database
         })
 
-        var insert = 'INSERT INTO to_notify (specimenId, notificationTelephone, preferredLanguage) VALUES (?,?,?)'
-        const result = await db.run(insert, [specimenId, body.notificationTelephone, body.preferredLanguage]);
-        console.log("🚀 ---------------------------------------------------------")
-        console.log("🚀 ~ file: server.js ~ line 137 ~ app.put ~ result", result)
-        console.log("🚀 ---------------------------------------------------------")
+        let dbInsert = 'INSERT INTO to_notify (specimenId, notificationTelephone, preferredLanguage) VALUES (?,?,?)';
+        const dbInsertResult = await db.run(dbInsert, [specimenId, body.notificationTelephone, body.preferredLanguage]);
+        console.log("🚀 ~ file: server.js ~ INSERT INTO to_notify ~ result", dbInsertResult);
+
+        // Data retention period is 1 year.
+        let dbDelete = "DELETE FROM to_notify WHERE requestTime < DATE('now', '-1 year')";
+        const dbDeleteResult = await db.run(dbDelete);
+        console.log("🚀 ~ file: server.js ~ DELETE FROM to_notify ~ result", dbDeleteResult);
+
         res.status(200).send({ message: "Successfully requested" });
-        
       })();
     
     })
