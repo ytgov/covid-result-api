@@ -89,14 +89,14 @@ app.put('/test-result', (req, res) => {
   const lastName = body.lastName;
 
   db.raw(`
-    SELECT TOP 1 *
-      FROM dbo.CovidTestResults
-      WHERE dbo.CovidTestResults.HCN = '${healthCareNumber}' AND
-        dbo.CovidTestResults.DOB = '${dob}' AND
-        dbo.CovidTestResults.LastName = '${lastName.toUpperCase()}'
-        ORDER BY dbo.CovidTestResults.CollectionDateTime DESC;`)
+    SELECT  TOP 1  PatientName, DOB, CollectionDateTime, ResultedDateTime, Result
+    FROM    dbo.CovidTestResults
+    WHERE   HCN = '${healthCareNumber}'
+    AND     DOB = '${dob}'
+    AND     LastName = '${lastName.toUpperCase()}'
+    ORDER   BY CollectionDateTime DESC, COALESCE(ResultedDateTime, CURRENT_TIMESTAMP) DESC;`)
     .then(rows => {
-      if (rows.length == 0) { 
+      if (rows.length === 0) {
         res.status(404).send("No matching result found for testee token fields");
         return
       }
