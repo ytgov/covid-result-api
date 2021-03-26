@@ -9,5 +9,10 @@ services:
             - "./:/usr/src/app"
             - "./.env:/.env"
             - "./database.db:/database.db"
-        ports:
-            - 8888:3000
+
+# Specify port mapped to 3000 in docker-compose.override.yml:
+# version: "3.7"
+# services:
+#     node:
+#         ports:
+#             - NNNN:3000
