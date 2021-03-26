@@ -1,0 +1,18 @@
+version: "3.7"
+services:
+    node:
+        build: 
+            context: "./"
+            dockerfile: Dockerfile
+        # command: ["nodemon", "server.js"]
+        volumes:
+            - "./:/usr/src/app"
+            - "./.env:/.env"
+            - "./database.db:/database.db"
+
+# Specify port mapped to 3000 in docker-compose.override.yml:
+# version: "3.7"
+# services:
+#     node:
+#         ports:
+#             - NNNN:3000
