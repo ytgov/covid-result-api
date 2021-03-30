@@ -76,13 +76,13 @@ var conn = knex({
 app.set("db", conn);
 
 // URI for tediousJS = `mssql://${process.env.DB_USER}:${process.env.DB_PASS}@${process.env.DB_HOST}/${process.env.DB_NAME}?encrypt=true`
-app.get('/', function (req, res) {
+app.get('/status', function (req, res) {
   const db = req.app.get('db');
 
   // (async function () {
   // })()
 
-  db.raw("SELECT TOP 3 * FROM dbo.CovidTestResults;")
+  db.raw("SELECT TOP 5 PatientName, DOB, CollectionDateTime, ResultedDateTime, Result, SpecimenID FROM dbo.CovidTestResults;")
     .then(rows => {
       if (rows.length > 0) { 
         res.status(200).send("Successful Connection");
@@ -110,7 +110,7 @@ app.put('/test-result', (req, res) => {
   const submittedOnBehalf = body.submittedOnBehalf;
 
   db.raw(`
-    SELECT  TOP 1  PatientName, DOB, CollectionDateTime, ResultedDateTime, Result, SpecimenID
+    SELECT  TOP 1 PatientName, DOB, CollectionDateTime, ResultedDateTime, Result, SpecimenID
     FROM    dbo.CovidTestResults
     WHERE   HCN = '${healthCareNumber}'
     AND     DOB = '${dob}'
