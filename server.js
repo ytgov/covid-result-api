@@ -265,7 +265,7 @@ app.get('/to-notify', async (req, res) => {
   const query = `SELECT specimenId, notificationTelephone, preferredLanguage
                  FROM to_notify
                  WHERE specimenId IS NOT NULL
-                   AND requestTime > DATE('now', '-1 week')`;
+                   AND requestTime > DATE('now', '-7 days')`;
 
   await db.all(query,
     (err, rows) => {
