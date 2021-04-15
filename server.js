@@ -17,29 +17,33 @@ let open = require('sqlite').open;
     driver: sqlite3.Database
   })
 
-  await db.run(`CREATE TABLE IF NOT EXISTS to_notify (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    requestTime timestamp DATE DEFAULT (DATETIME('now')),
-    preferredLanguage text, 
-    notificationTelephone text, 
-    specimenId text)`,
+  await db.run(`CREATE TABLE IF NOT EXISTS to_notify
+                (
+                    id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+                    requestTime           timestamp DATE DEFAULT (DATETIME('now')),
+                    preferredLanguage     text,
+                    notificationTelephone text,
+                    specimenId            text
+                )`,
     (err) => {
       if (err) {
-          console.log("🚀 ----------------------------------------")
-          console.log("🚀 ~ file: server.js ~ line 27 ~ err", err)
-          console.log("🚀 ----------------------------------------")
-          // Table already created
+        console.log("🚀 ----------------------------------------")
+        console.log("🚀 ~ file: server.js ~ line 27 ~ err", err)
+        console.log("🚀 ----------------------------------------")
+        // Table already created
       } else {
-          // Table just created, creating some rows
+        // Table just created, creating some rows
       }
     }
   );
 
   // Record delivery of Negative test results.
-  await db.run(`CREATE TABLE IF NOT EXISTS viewed_result (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    viewedTime timestamp DATE DEFAULT (DATETIME('now')),
-    specimenId integer)`,
+  await db.run(`CREATE TABLE IF NOT EXISTS viewed_result
+                (
+                    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                    viewedTime timestamp DATE DEFAULT (DATETIME('now')),
+                    specimenId integer
+                )`,
     (err) => {
       if (err) {
         console.log("🚀 ----------------------------------------")
@@ -56,7 +60,7 @@ let open = require('sqlite').open;
 
 
 app.use(express.json()) // for parsing application/json
-app.use(express.urlencoded({ extended: true })) // for parsing application/x-www-form-urlencoded
+app.use(express.urlencoded({extended: true})) // for parsing application/x-www-form-urlencoded
 
 let conn = knex({
   client: 'mssql',
@@ -82,7 +86,7 @@ app.get('/status', function (req, res) {
 
   db.raw("SELECT TOP 5 PatientName, DOB, CollectionDateTime, ResultedDateTime, Result, SpecimenID FROM dbo.CovidTestResults;")
     .then(rows => {
-      if (rows.length > 0) { 
+      if (rows.length > 0) {
         res.status(200).send("Successful Connection");
       }
     })
@@ -94,7 +98,7 @@ app.get('/status', function (req, res) {
 
 app.put('/test-result', (req, res) => {
   const db = req.app.get('db');
-  const { body } = req;
+  const {body} = req;
 
   if (!body.lastName || !body.healthCareNumber || !body.birthDate) {
     res.status(400).send("Bad request");
@@ -106,12 +110,17 @@ app.put('/test-result', (req, res) => {
   const lastName = body.lastName;
 
   db.raw(`
-    SELECT  TOP 1 PatientName, DOB, CollectionDateTime, ResultedDateTime, Result, SpecimenID
-    FROM    dbo.CovidTestResults
-    WHERE   HCN = '${healthCareNumber}'
-    AND     DOB = '${dob}'
-    AND     LastName = '${lastName.toUpperCase()}'
-    ORDER   BY CollectionDateTime DESC, COALESCE(ResultedDateTime, CURRENT_TIMESTAMP) DESC;`)
+      SELECT TOP 1 PatientName, DOB,
+             CollectionDateTime,
+             ResultedDateTime,
+             Result,
+             SpecimenID
+      FROM dbo.CovidTestResults
+      WHERE HCN = '${healthCareNumber}'
+        AND DOB = '${dob}'
+        AND LastName = '${lastName.toUpperCase()}'
+      ORDER BY CollectionDateTime DESC,
+               COALESCE(ResultedDateTime, CURRENT_TIMESTAMP) DESC;`)
     .then(rows => {
       if (rows.length === 0) {
         res.status(404).send("No matching result found for testee token fields");
@@ -160,7 +169,7 @@ app.put('/test-result', (req, res) => {
 
 app.put('/notification-request', async (req, res) => {
   const msdb = req.app.get('db');
-  const { body } = req;
+  const {body} = req;
 
   if (!body.lastName || !body.healthCareNumber || !body.birthDate || !body.notificationTelephone || !body.preferredLanguage) {
     res.status(400).send("Bad request");
@@ -172,11 +181,11 @@ app.put('/notification-request', async (req, res) => {
   const lastName = body.lastName;
 
   msdb.raw(`
-    SELECT *
+      SELECT *
       FROM dbo.CovidTestResults
-      WHERE dbo.CovidTestResults.HCN = '${healthCareNumber}' AND
-        dbo.CovidTestResults.DOB = '${dob}' AND
-        dbo.CovidTestResults.LastName = '${lastName.toUpperCase()}';`)
+      WHERE dbo.CovidTestResults.HCN = '${healthCareNumber}'
+        AND dbo.CovidTestResults.DOB = '${dob}'
+        AND dbo.CovidTestResults.LastName = '${lastName.toUpperCase()}';`)
     .then(rows => {
       // if (rows.length == 0) { 
       //   res.status(404).send("No matching result found for testee token fields");
@@ -201,9 +210,9 @@ app.put('/notification-request', async (req, res) => {
         const dbDeleteResult = await db.run(dbDelete);
         console.log("🚀 ~ file: server.js ~ DELETE FROM to_notify ~ result", dbDeleteResult);
 
-        res.status(200).send({ message: "Successfully requested" });
+        res.status(200).send({message: "Successfully requested"});
       })();
-    
+
     })
     .catch((e) => {
       console.error(e);
