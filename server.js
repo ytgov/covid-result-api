@@ -93,6 +93,7 @@ app.get('/status', function (req, res) {
 });
 
 
+// Retrieve a test result.
 app.put('/test-result', (req, res) => {
   const db = req.app.get('db');
 
@@ -180,8 +181,9 @@ app.put('/test-result', (req, res) => {
 });
 
 
+// Request an SMS notification once a test result is ready.
 app.put('/notification-request', async (req, res) => {
-  const msdb = req.app.get('db');
+  const db = req.app.get('db');
 
   /** @namespace body.lastName **/
   /** @namespace body.healthCareNumber **/
@@ -197,45 +199,56 @@ app.put('/notification-request', async (req, res) => {
 
   const healthCareNumber = body.healthCareNumber.replace(/-/g, '');
   const dob = body.birthDate.replace(/-/g, '');
-  const lastName = body.lastName;
+  const lastName = body.lastName.toUpperCase();
 
-  msdb.raw(`
-      SELECT *
-      FROM dbo.CovidTestResults
-      WHERE dbo.CovidTestResults.HCN = '${healthCareNumber}'
-        AND dbo.CovidTestResults.DOB = '${dob}'
-        AND dbo.CovidTestResults.LastName = '${lastName.toUpperCase()}';`)
+  db.select('SpecimenID')
+    .from('CovidTestResults')
+    .where('HCN', healthCareNumber)
+    .where('DOB', dob)
+    .where('LastName', lastName)
+    .orderBy('CollectionDateTime', 'DESC')
+    .orderByRaw('COALESCE(ResultedDateTime, CURRENT_TIMESTAMP) DESC')
+    .limit(1)
     .then(rows => {
-      // if (rows.length == 0) { 
-      //   res.status(404).send("No matching result found for testee token fields");
-      //   return
-      // }
-      const result = rows[0] || {};
-      const specimenId = result.SpecimenID;
+      if (rows.length === 0) {
+        res.status(404).send("The requested test result was Not Found.");
+        return;
+      }
+
+      /** @namespace testResult.SpecimenID **/
+      const testResult = rows[0];
 
       (async () => {
-        // open the database
         const db = await open({
           filename: './database.db',
           driver: sqlite3.Database
         })
 
         let dbInsert = 'INSERT INTO to_notify (specimenId, notificationTelephone, preferredLanguage) VALUES (?,?,?)';
-        const dbInsertResult = await db.run(dbInsert, [specimenId, body.notificationTelephone, body.preferredLanguage]);
-        console.log("🚀 ~ file: server.js ~ INSERT INTO to_notify ~ result", dbInsertResult);
+        await db.run(dbInsert, [testResult.SpecimenID, body.notificationTelephone, body.preferredLanguage],
+          (err) => {
+            if (err) {
+              console.error(`Attempt to insert into to_notify failed: ${err}`)
+            }
+          });
 
         // Data retention period is 1 year.
-        let dbDelete = "DELETE FROM to_notify WHERE requestTime < DATE('now', '-1 year')";
-        const dbDeleteResult = await db.run(dbDelete);
-        console.log("🚀 ~ file: server.js ~ DELETE FROM to_notify ~ result", dbDeleteResult);
+        const dbDelete = "DELETE FROM to_notify WHERE requestTime < DATE('now', '-1 year')";
+        await db.run(dbDelete, [],
+          (err) => {
+            if (err) {
+              console.error(`Attempt to delete from to_notify failed: ${err}`)
+            }
+          });
 
-        res.status(200).send({message: "Successfully requested"});
+        res.status(200).send({message: "SMS notification has been requested."});
       })();
 
     })
     .catch((e) => {
-      console.error(e);
-      res.status(500).send("ERROR: Either the connection to the database isn't working or the query is incorrect");
+      const msg = `Attempt to request an SMS notification failed: ${err}`;
+      console.error(msg);
+      res.status(500).send(msg);
     })
 });
 
