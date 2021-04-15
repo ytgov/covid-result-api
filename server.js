@@ -245,13 +245,15 @@ app.put('/notification-request', async (req, res) => {
       })();
 
     })
-    .catch((e) => {
+    .catch((err) => {
       const msg = `Attempt to request an SMS notification failed: ${err}`;
       console.error(msg);
       res.status(500).send(msg);
     })
 });
 
+
+// Retrieve the recent notification requests.
 app.get('/to-notify', async (req, res) => {
   // open the database
   const db = await open({
@@ -259,11 +261,23 @@ app.get('/to-notify', async (req, res) => {
     driver: sqlite3.Database
   })
 
-  const query = 'Select specimenId, notificationTelephone, preferredLanguage from to_notify where specimenId is not null';
-  const result = await db.all(query);
-  res.status(200).send(result);
+  // Limit results to just the past week of notification requests.
+  const query = `SELECT specimenId, notificationTelephone, preferredLanguage
+                 FROM to_notify
+                 WHERE specimenId IS NOT NULL
+                   AND requestTime > DATE('now', '-1 week')`;
+
+  await db.all(query,
+    (err, rows) => {
+    if (err) {
+      const msg = `Attempt to retrieve recent SMS notifications failed: ${err}`;
+      console.error(msg);
+      res.status(500).send(msg);
+    } else {
+      res.status(200).send(rows);
+    }
+  });
 });
 
-console.log(`Database Info: ${process.env.DB_HOST} ${process.env.DB_NAME}`)
 
 app.listen(port);
