@@ -1,13 +1,13 @@
 require('dotenv').config();
 
-var knex = require('knex');
-var express = require('express');
-var app = express();
-var port = process.env.PORT || 3000;
+let knex = require('knex');
+let express = require('express');
+let app = express();
+let port = process.env.PORT || 3000;
 
-var sqlite3 = require('sqlite3');
+let sqlite3 = require('sqlite3');
 sqlite3.verbose();
-var open = require('sqlite').open;
+let open = require('sqlite').open;
 
 // this is a top-level await 
 (async () => {
@@ -17,39 +17,32 @@ var open = require('sqlite').open;
     driver: sqlite3.Database
   })
 
-  await db.run(`CREATE TABLE IF NOT EXISTS to_notify (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    requestTime timestamp DATE DEFAULT (DATETIME('now')),
-    preferredLanguage text, 
-    notificationTelephone text, 
-    specimenId text)`,
+  // Requests for SMS notification.
+  await db.run(`CREATE TABLE IF NOT EXISTS to_notify
+                (
+                    id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+                    requestTime           TIMESTAMP DATE DEFAULT (DATETIME('now')),
+                    preferredLanguage     TEXT,
+                    notificationTelephone TEXT,
+                    specimenId            TEXT
+                )`,
     (err) => {
       if (err) {
-          console.log("🚀 ----------------------------------------")
-          console.log("🚀 ~ file: server.js ~ line 27 ~ err", err)
-          console.log("🚀 ----------------------------------------")
-          // Table already created
-      } else {
-          // Table just created, creating some rows
+        console.error(`Attempt to create to_notify table failed: ${err}`)
       }
     }
   );
 
-  // Record delivery of Negative test results, as well as the status of the
-  // submittedOnBehalf flag.
-  await db.run(`CREATE TABLE IF NOT EXISTS viewed_result (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    viewedTime timestamp DATE DEFAULT (DATETIME('now')),
-    submittedOnBehalf integer,
-    specimenId integer)`,
+  // Delivery of Negative test results.
+  await db.run(`CREATE TABLE IF NOT EXISTS viewed_result
+                (
+                    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                    viewedTime TIMESTAMP DATE DEFAULT (DATETIME('now')),
+                    specimenId INTEGER
+                )`,
     (err) => {
       if (err) {
-        console.log("🚀 ----------------------------------------")
-        console.log("🚀 ~ file: server.js ~ line 43 ~ err", err)
-        console.log("🚀 ----------------------------------------")
-        // Table already created
-      } else {
-        // Table just created, creating some rows
+        console.error(`Attempt to create viewed_result table failed: ${err}`)
       }
     }
   );
@@ -58,9 +51,9 @@ var open = require('sqlite').open;
 
 
 app.use(express.json()) // for parsing application/json
-app.use(express.urlencoded({ extended: true })) // for parsing application/x-www-form-urlencoded
+app.use(express.urlencoded({extended: true})) // for parsing application/x-www-form-urlencoded
 
-var conn = knex({
+let conn = knex({
   client: 'mssql',
   connection: {
     host: process.env.DB_HOST,
@@ -75,29 +68,39 @@ var conn = knex({
 
 app.set("db", conn);
 
-// URI for tediousJS = `mssql://${process.env.DB_USER}:${process.env.DB_PASS}@${process.env.DB_HOST}/${process.env.DB_NAME}?encrypt=true`
+
+// Verify connection to database and existing data for necessary columns.
 app.get('/status', function (req, res) {
   const db = req.app.get('db');
 
-  // (async function () {
-  // })()
-
-  db.raw("SELECT TOP 5 PatientName, DOB, CollectionDateTime, ResultedDateTime, Result, SpecimenID FROM dbo.CovidTestResults;")
+  db.select('PatientName', 'DOB', 'CollectionDateTime', 'ResultedDateTime', 'Result', 'SpecimenID')
+    .from('CovidTestResults')
+    .limit(5)
     .then(rows => {
-      if (rows.length > 0) { 
-        res.status(200).send("Successful Connection");
-        return
+      if (rows.length === 5) {
+        const msg = 'API status verified.'
+        console.log(msg);
+        res.status(200).send(msg);
+      } else {
+        throw new Error('Unexpected number of test results in database.');
       }
     })
-    .catch((e) => {
-      console.error(e);
-      res.status(500).send("ERROR: Either the connection to the database isn't working or the query is incorrect");
+    .catch((err) => {
+      const msg = `Attempt to verify API status failed: ${err}`;
+      console.error(msg);
+      res.status(500).send(msg);
     })
 });
 
+
+// Retrieve a test result.
 app.put('/test-result', (req, res) => {
   const db = req.app.get('db');
-  const { body } = req;
+
+  /** @namespace body.lastName **/
+  /** @namespace body.healthCareNumber **/
+  /** @namespace body.birthDate **/
+  const {body} = req;
 
   if (!body.lastName || !body.healthCareNumber || !body.birthDate) {
     res.status(400).send("Bad request");
@@ -106,47 +109,61 @@ app.put('/test-result', (req, res) => {
 
   const healthCareNumber = body.healthCareNumber.replace(/-/g, '');
   const dob = body.birthDate.replace(/-/g, '');
-  const lastName = body.lastName;
-  const submittedOnBehalf = body.submittedOnBehalf;
+  const lastName = body.lastName.toUpperCase();
 
-  db.raw(`
-    SELECT  TOP 1 PatientName, DOB, CollectionDateTime, ResultedDateTime, Result, SpecimenID
-    FROM    dbo.CovidTestResults
-    WHERE   HCN = '${healthCareNumber}'
-    AND     DOB = '${dob}'
-    AND     LastName = '${lastName.toUpperCase()}'
-    ORDER   BY CollectionDateTime DESC, COALESCE(ResultedDateTime, CURRENT_TIMESTAMP) DESC;`)
+  db.select('PatientName', 'DOB', 'CollectionDateTime', 'ResultedDateTime', 'Result', 'SpecimenID')
+    .from('CovidTestResults')
+    .where('HCN', healthCareNumber)
+    .where('DOB', dob)
+    .where('LastName', lastName)
+    .orderBy('CollectionDateTime', 'DESC')
+    .orderByRaw('COALESCE(ResultedDateTime, CURRENT_TIMESTAMP) DESC')
+    .limit(1)
     .then(rows => {
       if (rows.length === 0) {
-        res.status(404).send("No matching result found for testee token fields");
+        res.status(404).send("The requested test result was Not Found.");
         return;
       }
 
-      const result = rows[0];
+      /** @namespace testResult.PatientName **/
+      /** @namespace testResult.DOB **/
+      /** @namespace testResult.CollectionDateTime **/
+      /** @namespace testResult.ResultedDateTime **/
+      /** @namespace testResult.Result **/
+      /** @namespace testResult.SpecimenID **/
+      const testResult = rows[0];
 
-      if (result.Result && /^Negative\.?$/.test(String(result.Result).trim())) {
+      if (testResult.Result && /^Negative\.?$/.test(String(testResult.Result).trim())) {
         // Record the delivery of the Negative result, including the opaque Specimen ID.
         (async () => {
           const db = await open({
             filename: './database.db',
             driver: sqlite3.Database
-          })
+          });
 
-          let dbInsert = 'INSERT INTO viewed_result (submittedOnBehalf, specimenId) VALUES (?,?)';
-          const dbInsertResult = await db.run(dbInsert, [(submittedOnBehalf ? 1 : 0), result.SpecimenID]);
-          console.log("🚀 ~ file: server.js ~ INSERT INTO viewed_result ~ result", dbInsertResult);
+          const dbInsert = 'INSERT INTO viewed_result (specimenId) VALUES (?)';
+          await db.run(dbInsert, [testResult.SpecimenID],
+            (err) => {
+              if (err) {
+                console.error(`Attempt to insert into viewed_result failed: ${err}`)
+              }
+            });
 
           // Data retention period is 1 year.
-          let dbDelete = "DELETE FROM viewed_result WHERE viewedTime < DATE('now', '-1 year')";
-          const dbDeleteResult = await db.run(dbDelete);
-          console.log("🚀 ~ file: server.js ~ DELETE FROM viewed_result ~ result", dbDeleteResult);
+          const dbDelete = "DELETE FROM viewed_result WHERE viewedTime < DATE('now', '-1 year')";
+          await db.run(dbDelete, [],
+            (err) => {
+              if (err) {
+                console.error(`Attempt to delete from viewed_result failed: ${err}`)
+              }
+            });
         })();
 
         const responseBody = {
-          "patientName": result.PatientName.trim().toLowerCase().replace(/\w\S*/g, (w) => (w.replace(/^\w/, (c) => c.toUpperCase()))),
-          "birthDate": result.DOB.substring(0, 4) + "-" + result.DOB.substring(4, 6) + '-' + result.DOB.substring(6, result.DOB.length),
-          "collectionTimestamp": result.CollectionDateTime,
-          "resultEnteredTimestamp": result.ResultedDateTime,
+          "patientName": testResult.PatientName.trim().toLowerCase().replace(/\w\S*/g, (w) => (w.replace(/^\w/, (c) => c.toUpperCase()))),
+          "birthDate": testResult.DOB.substring(0, 4) + "-" + testResult.DOB.substring(4, 6) + '-' + testResult.DOB.substring(6, testResult.DOB.length),
+          "collectionTimestamp": testResult.CollectionDateTime,
+          "resultEnteredTimestamp": testResult.ResultedDateTime,
           "result": 'Negative',
         }
 
@@ -154,17 +171,26 @@ app.put('/test-result', (req, res) => {
         return;
       }
 
-      res.status(204).send("The test result is not yet ready.");
+      res.status(204).send("The requested test result is Not Ready.");
     })
-    .catch((e) => {
-      console.error(e);
-      res.status(500).send("ERROR: Either the connection to the database isn't working or the query is incorrect");
+    .catch((err) => {
+      const msg = `Attempt to retrieve test result failed: ${err}`;
+      console.error(msg);
+      res.status(500).send(msg);
     })
 });
 
+
+// Request an SMS notification once a test result is ready.
 app.put('/notification-request', async (req, res) => {
-  const msdb = req.app.get('db');
-  const { body } = req;
+  const db = req.app.get('db');
+
+  /** @namespace body.lastName **/
+  /** @namespace body.healthCareNumber **/
+  /** @namespace body.birthDate **/
+  /** @namespace body.notificationTelephone **/
+  /** @namespace body.preferredLanguage **/
+  const {body} = req;
 
   if (!body.lastName || !body.healthCareNumber || !body.birthDate || !body.notificationTelephone || !body.preferredLanguage) {
     res.status(400).send("Bad request");
@@ -173,48 +199,61 @@ app.put('/notification-request', async (req, res) => {
 
   const healthCareNumber = body.healthCareNumber.replace(/-/g, '');
   const dob = body.birthDate.replace(/-/g, '');
-  const lastName = body.lastName;
+  const lastName = body.lastName.toUpperCase();
 
-  msdb.raw(`
-    SELECT *
-      FROM dbo.CovidTestResults
-      WHERE dbo.CovidTestResults.HCN = '${healthCareNumber}' AND
-        dbo.CovidTestResults.DOB = '${dob}' AND
-        dbo.CovidTestResults.LastName = '${lastName.toUpperCase()}';`)
+  db.select('SpecimenID')
+    .from('CovidTestResults')
+    .where('HCN', healthCareNumber)
+    .where('DOB', dob)
+    .where('LastName', lastName)
+    .orderBy('CollectionDateTime', 'DESC')
+    .orderByRaw('COALESCE(ResultedDateTime, CURRENT_TIMESTAMP) DESC')
+    .limit(1)
     .then(rows => {
-      // if (rows.length == 0) { 
-      //   res.status(404).send("No matching result found for testee token fields");
-      //   return
-      // }
-      const result = rows[0] || {};
-      const specimenId = result.SpecimenID;
+      if (rows.length === 0) {
+        res.status(404).send("The requested test result was Not Found.");
+        return;
+      }
+
+      /** @namespace testResult.SpecimenID **/
+      const testResult = rows[0];
 
       (async () => {
-        // open the database
         const db = await open({
           filename: './database.db',
           driver: sqlite3.Database
         })
 
         let dbInsert = 'INSERT INTO to_notify (specimenId, notificationTelephone, preferredLanguage) VALUES (?,?,?)';
-        const dbInsertResult = await db.run(dbInsert, [specimenId, body.notificationTelephone, body.preferredLanguage]);
-        console.log("🚀 ~ file: server.js ~ INSERT INTO to_notify ~ result", dbInsertResult);
+        await db.run(dbInsert, [testResult.SpecimenID, body.notificationTelephone, body.preferredLanguage],
+          (err) => {
+            if (err) {
+              console.error(`Attempt to insert into to_notify failed: ${err}`)
+            }
+          });
 
         // Data retention period is 1 year.
-        let dbDelete = "DELETE FROM to_notify WHERE requestTime < DATE('now', '-1 year')";
-        const dbDeleteResult = await db.run(dbDelete);
-        console.log("🚀 ~ file: server.js ~ DELETE FROM to_notify ~ result", dbDeleteResult);
+        const dbDelete = "DELETE FROM to_notify WHERE requestTime < DATE('now', '-1 year')";
+        await db.run(dbDelete, [],
+          (err) => {
+            if (err) {
+              console.error(`Attempt to delete from to_notify failed: ${err}`)
+            }
+          });
 
-        res.status(200).send({ message: "Successfully requested" });
+        res.status(200).send({message: "SMS notification has been requested."});
       })();
-    
+
     })
-    .catch((e) => {
-      console.error(e);
-      res.status(500).send("ERROR: Either the connection to the database isn't working or the query is incorrect");
+    .catch((err) => {
+      const msg = `Attempt to request an SMS notification failed: ${err}`;
+      console.error(msg);
+      res.status(500).send(msg);
     })
 });
 
+
+// Retrieve the recent notification requests.
 app.get('/to-notify', async (req, res) => {
   // open the database
   const db = await open({
@@ -222,11 +261,29 @@ app.get('/to-notify', async (req, res) => {
     driver: sqlite3.Database
   })
 
-  var query = 'Select specimenId, notificationTelephone, preferredLanguage from to_notify where specimenId is not null';
-  const result = await db.all(query);
-  res.status(200).send(result);
+  let errMessage = '';
+
+  // Limit results to just the past week of notification requests.
+  const query = `SELECT DISTINCT specimenId, notificationTelephone, preferredLanguage
+                 FROM to_notify
+                 WHERE specimenId IS NOT NULL
+                   AND requestTime > DATE('now', '-7 days')`;
+
+  const notifications = await db.all(query,
+    (err) => {
+    if (err) {
+      errMessage = `Attempt to retrieve recent SMS notifications failed: ${err}`;
+    }
+  });
+
+  if (errMessage !== '') {
+    console.error(errMessage);
+    res.status(500).send(errMessage);
+    return;
+  }
+
+  res.status(200).send(notifications);
 });
 
-console.log(`Database Info: ${process.env.DB_HOST} ${process.env.DB_NAME}`)
 
 app.listen(port);
