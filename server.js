@@ -95,6 +95,10 @@ app.get('/status', function (req, res) {
 
 app.put('/test-result', (req, res) => {
   const db = req.app.get('db');
+
+  /** @namespace body.lastName **/
+  /** @namespace body.healthCareNumber **/
+  /** @namespace body.birthDate **/
   const {body} = req;
 
   if (!body.lastName || !body.healthCareNumber || !body.birthDate) {
@@ -120,29 +124,45 @@ app.put('/test-result', (req, res) => {
         return;
       }
 
-      const result = rows[0];
+      /** @namespace testResult.PatientName **/
+      /** @namespace testResult.DOB **/
+      /** @namespace testResult.CollectionDateTime **/
+      /** @namespace testResult.ResultedDateTime **/
+      /** @namespace testResult.Result **/
+      /** @namespace testResult.SpecimenID **/
+      const testResult = rows[0];
 
-      if (result.Result && /^Negative\.?$/.test(String(result.Result).trim())) {
+      if (testResult.Result && /^Negative\.?$/.test(String(testResult.Result).trim())) {
         // Record the delivery of the Negative result, including the opaque Specimen ID.
         (async () => {
           const db = await open({
             filename: './database.db',
             driver: sqlite3.Database
-          })
+          });
 
-          let dbInsert = 'INSERT INTO viewed_result (specimenId) VALUES (?)';
-          const dbInsertResult = await db.run(dbInsert, [result.SpecimenID]);
+          const dbInsert = 'INSERT INTO viewed_result (specimenId) VALUES (?)';
+          await db.run(dbInsert, [testResult.SpecimenID],
+            (err) => {
+              if (err) {
+                console.error(`Attempt to insert into viewed_result failed: ${err}`)
+              }
+            });
 
           // Data retention period is 1 year.
-          let dbDelete = "DELETE FROM viewed_result WHERE viewedTime < DATE('now', '-1 year')";
-          const dbDeleteResult = await db.run(dbDelete);
+          const dbDelete = "DELETE FROM viewed_result WHERE viewedTime < DATE('now', '-1 year')";
+          await db.run(dbDelete, [],
+            (err) => {
+              if (err) {
+                console.error(`Attempt to delete from viewed_result failed: ${err}`)
+              }
+            });
         })();
 
         const responseBody = {
-          "patientName": result.PatientName.trim().toLowerCase().replace(/\w\S*/g, (w) => (w.replace(/^\w/, (c) => c.toUpperCase()))),
-          "birthDate": result.DOB.substring(0, 4) + "-" + result.DOB.substring(4, 6) + '-' + result.DOB.substring(6, result.DOB.length),
-          "collectionTimestamp": result.CollectionDateTime,
-          "resultEnteredTimestamp": result.ResultedDateTime,
+          "patientName": testResult.PatientName.trim().toLowerCase().replace(/\w\S*/g, (w) => (w.replace(/^\w/, (c) => c.toUpperCase()))),
+          "birthDate": testResult.DOB.substring(0, 4) + "-" + testResult.DOB.substring(4, 6) + '-' + testResult.DOB.substring(6, testResult.DOB.length),
+          "collectionTimestamp": testResult.CollectionDateTime,
+          "resultEnteredTimestamp": testResult.ResultedDateTime,
           "result": 'Negative',
         }
 
@@ -162,6 +182,12 @@ app.put('/test-result', (req, res) => {
 
 app.put('/notification-request', async (req, res) => {
   const msdb = req.app.get('db');
+
+  /** @namespace body.lastName **/
+  /** @namespace body.healthCareNumber **/
+  /** @namespace body.birthDate **/
+  /** @namespace body.notificationTelephone **/
+  /** @namespace body.preferredLanguage **/
   const {body} = req;
 
   if (!body.lastName || !body.healthCareNumber || !body.birthDate || !body.notificationTelephone || !body.preferredLanguage) {
