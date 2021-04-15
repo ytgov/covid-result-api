@@ -29,8 +29,6 @@ let open = require('sqlite').open;
     (err) => {
       if (err) {
         console.error('Attempted to create to_notify table:', err)
-      } else {
-        console.log('Created to_notify table.')
       }
     }
   );
@@ -45,8 +43,6 @@ let open = require('sqlite').open;
     (err) => {
       if (err) {
         console.error('Attempted to create viewed_result table:', err)
-      } else {
-        console.log('Created viewed_result table.')
       }
     }
   );
@@ -72,16 +68,16 @@ let conn = knex({
 
 app.set("db", conn);
 
-// URI for tediousJS = `mssql://${process.env.DB_USER}:${process.env.DB_PASS}@${process.env.DB_HOST}/${process.env.DB_NAME}?encrypt=true`
+
+// Verify connection to database and existing data for necessary columns.
 app.get('/status', function (req, res) {
   const db = req.app.get('db');
 
-  // (async function () {
-  // })()
-
-  db.raw("SELECT TOP 5 PatientName, DOB, CollectionDateTime, ResultedDateTime, Result, SpecimenID FROM dbo.CovidTestResults;")
+  db.select('PatientName', 'DOB', 'CollectionDateTime', 'ResultedDateTime', 'Result', 'SpecimenID')
+    .from('CovidTestResults')
+    .limit(5)
     .then(rows => {
-      if (rows.length > 0) {
+      if (rows.length === 5) {
         res.status(200).send("Successful Connection");
       }
     })
@@ -90,6 +86,7 @@ app.get('/status', function (req, res) {
       res.status(500).send("ERROR: Either the connection to the database isn't working or the query is incorrect");
     })
 });
+
 
 app.put('/test-result', (req, res) => {
   const db = req.app.get('db');
