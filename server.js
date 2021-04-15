@@ -1,13 +1,13 @@
 require('dotenv').config();
 
-var knex = require('knex');
-var express = require('express');
-var app = express();
-var port = process.env.PORT || 3000;
+let knex = require('knex');
+let express = require('express');
+let app = express();
+let port = process.env.PORT || 3000;
 
-var sqlite3 = require('sqlite3');
+let sqlite3 = require('sqlite3');
 sqlite3.verbose();
-var open = require('sqlite').open;
+let open = require('sqlite').open;
 
 // this is a top-level await 
 (async () => {
@@ -60,7 +60,7 @@ var open = require('sqlite').open;
 app.use(express.json()) // for parsing application/json
 app.use(express.urlencoded({ extended: true })) // for parsing application/x-www-form-urlencoded
 
-var conn = knex({
+let conn = knex({
   client: 'mssql',
   connection: {
     host: process.env.DB_HOST,
@@ -86,7 +86,6 @@ app.get('/status', function (req, res) {
     .then(rows => {
       if (rows.length > 0) { 
         res.status(200).send("Successful Connection");
-        return
       }
     })
     .catch((e) => {
@@ -222,7 +221,7 @@ app.get('/to-notify', async (req, res) => {
     driver: sqlite3.Database
   })
 
-  var query = 'Select specimenId, notificationTelephone, preferredLanguage from to_notify where specimenId is not null';
+  const query = 'Select specimenId, notificationTelephone, preferredLanguage from to_notify where specimenId is not null';
   const result = await db.all(query);
   res.status(200).send(result);
 });
