@@ -104,3 +104,6 @@ dist
 
 # Docker overrides
 docker-compose.override.yml
+
+# SQLite DB
+database.db

@@ -18,23 +18,14 @@ The component is intended to run from within a Docker container.
 2. Create the environment file from the template: `cp .env.base .env`
 3. Populate the `.env` environment file with the Meditech test result database
    credentials.
-4. Create `docker-compose.override.yml` from the instructions in `docker-compose.yml`
+4. Copy `database.db.sample` to `database.db` which will be the running SQLite database
+   file. The database is initially empty.
+5. Create `docker-compose.override.yml` from the instructions in `docker-compose.yml`
    and set the external port number.
-5. Launch the container: `sudo docker-compose up --build -d`
-6. Attach to a shell in the container image: `sudo docker exec -it <name> bash`
-7. Install the NPM requirements: `npm install`
-8. Exit the container and verify from a remote server that the component is responding
+6. Launch the container: `sudo docker-compose up --build -d`
+7. Attach to a shell in the container image: `sudo docker exec -it <name> bash`
+8. Install the NPM requirements: `npm install`
+9. Exit the container and verify from a remote server that the component is responding
    and able to connect to the database:
    `curl -v http://<docker-server>:<external-port>/`. Expect an HTTP 200 response with
    the message "Successful Connection".
-
-## Issues
-
-The SQLite database is part of the repository.
-It shouldn't be, but without it the Node.js code tends to create a directory rather than
-an empty `database.db` file.
-The version of the database in the repository is completely empty, and the tables are
-created by the component as needed.
-Care must be taken to not overwrite the database with the version in Git once the
-service is running in production.
-Release 2 of the project intends to migrate this data to an enterprise MSSQL database.
