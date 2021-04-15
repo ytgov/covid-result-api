@@ -261,6 +261,8 @@ app.get('/to-notify', async (req, res) => {
     driver: sqlite3.Database
   })
 
+  let errMessage = '';
+
   // Limit results to just the past week of notification requests.
   const query = `SELECT DISTINCT specimenId, notificationTelephone, preferredLanguage
                  FROM to_notify
@@ -270,11 +272,15 @@ app.get('/to-notify', async (req, res) => {
   const notifications = await db.all(query,
     (err) => {
     if (err) {
-      const msg = `Attempt to retrieve recent SMS notifications failed: ${err}`;
-      console.error(msg);
-      res.status(500).send(msg);
+      errMessage = `Attempt to retrieve recent SMS notifications failed: ${err}`;
     }
   });
+
+  if (errMessage !== '') {
+    console.error(errMessage);
+    res.status(500).send(errMessage);
+    return;
+  }
 
   res.status(200).send(notifications);
 });
