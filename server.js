@@ -35,12 +35,10 @@ let open = require('sqlite').open;
     }
   );
 
-  // Record delivery of Negative test results, as well as the status of the
-  // submittedOnBehalf flag.
+  // Record delivery of Negative test results.
   await db.run(`CREATE TABLE IF NOT EXISTS viewed_result (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     viewedTime timestamp DATE DEFAULT (DATETIME('now')),
-    submittedOnBehalf integer,
     specimenId integer)`,
     (err) => {
       if (err) {
@@ -106,7 +104,6 @@ app.put('/test-result', (req, res) => {
   const healthCareNumber = body.healthCareNumber.replace(/-/g, '');
   const dob = body.birthDate.replace(/-/g, '');
   const lastName = body.lastName;
-  const submittedOnBehalf = body.submittedOnBehalf;
 
   db.raw(`
     SELECT  TOP 1 PatientName, DOB, CollectionDateTime, ResultedDateTime, Result, SpecimenID
@@ -131,8 +128,8 @@ app.put('/test-result', (req, res) => {
             driver: sqlite3.Database
           })
 
-          let dbInsert = 'INSERT INTO viewed_result (submittedOnBehalf, specimenId) VALUES (?,?)';
-          const dbInsertResult = await db.run(dbInsert, [(submittedOnBehalf ? 1 : 0), result.SpecimenID]);
+          let dbInsert = 'INSERT INTO viewed_result (specimenId) VALUES (?)';
+          const dbInsertResult = await db.run(dbInsert, [result.SpecimenID]);
           console.log("🚀 ~ file: server.js ~ INSERT INTO viewed_result ~ result", dbInsertResult);
 
           // Data retention period is 1 year.
