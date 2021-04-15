@@ -104,23 +104,19 @@ app.put('/test-result', (req, res) => {
 
   const healthCareNumber = body.healthCareNumber.replace(/-/g, '');
   const dob = body.birthDate.replace(/-/g, '');
-  const lastName = body.lastName;
+  const lastName = body.lastName.toUpperCase();
 
-  db.raw(`
-      SELECT TOP 1 PatientName, DOB,
-             CollectionDateTime,
-             ResultedDateTime,
-             Result,
-             SpecimenID
-      FROM dbo.CovidTestResults
-      WHERE HCN = '${healthCareNumber}'
-        AND DOB = '${dob}'
-        AND LastName = '${lastName.toUpperCase()}'
-      ORDER BY CollectionDateTime DESC,
-               COALESCE(ResultedDateTime, CURRENT_TIMESTAMP) DESC;`)
+  db.select('PatientName', 'DOB', 'CollectionDateTime', 'ResultedDateTime', 'Result', 'SpecimenID')
+    .from('CovidTestResults')
+    .where('HCN', healthCareNumber)
+    .where('DOB', dob)
+    .where('LastName', lastName)
+    .orderBy('CollectionDateTime', 'DESC')
+    .orderByRaw('COALESCE(ResultedDateTime, CURRENT_TIMESTAMP) DESC')
+    .limit(1)
     .then(rows => {
       if (rows.length === 0) {
-        res.status(404).send("No matching result found for testee token fields");
+        res.status(404).send("The requested test result was Not Found.");
         return;
       }
 
@@ -136,12 +132,10 @@ app.put('/test-result', (req, res) => {
 
           let dbInsert = 'INSERT INTO viewed_result (specimenId) VALUES (?)';
           const dbInsertResult = await db.run(dbInsert, [result.SpecimenID]);
-          console.log("🚀 ~ file: server.js ~ INSERT INTO viewed_result ~ result", dbInsertResult);
 
           // Data retention period is 1 year.
           let dbDelete = "DELETE FROM viewed_result WHERE viewedTime < DATE('now', '-1 year')";
           const dbDeleteResult = await db.run(dbDelete);
-          console.log("🚀 ~ file: server.js ~ DELETE FROM viewed_result ~ result", dbDeleteResult);
         })();
 
         const responseBody = {
@@ -156,13 +150,15 @@ app.put('/test-result', (req, res) => {
         return;
       }
 
-      res.status(204).send("The test result is not yet ready.");
+      res.status(204).send("The requested test result is Not Ready.");
     })
-    .catch((e) => {
-      console.error(e);
-      res.status(500).send("ERROR: Either the connection to the database isn't working or the query is incorrect");
+    .catch((err) => {
+      const msg = `Attempt to retrieve test result failed: ${err}`;
+      console.error(msg);
+      res.status(500).send(msg);
     })
 });
+
 
 app.put('/notification-request', async (req, res) => {
   const msdb = req.app.get('db');
