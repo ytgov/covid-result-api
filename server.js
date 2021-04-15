@@ -28,7 +28,7 @@ let open = require('sqlite').open;
                 )`,
     (err) => {
       if (err) {
-        console.error('Attempted to create to_notify table:', err)
+        console.error(`Attempt to create to_notify table failed: ${err}`)
       }
     }
   );
@@ -42,7 +42,7 @@ let open = require('sqlite').open;
                 )`,
     (err) => {
       if (err) {
-        console.error('Attempted to create viewed_result table:', err)
+        console.error(`Attempt to create viewed_result table failed: ${err}`)
       }
     }
   );
@@ -78,12 +78,17 @@ app.get('/status', function (req, res) {
     .limit(5)
     .then(rows => {
       if (rows.length === 5) {
-        res.status(200).send("Successful Connection");
+        const msg = 'API status verified.'
+        console.log(msg);
+        res.status(200).send(msg);
+      } else {
+        throw new Error('Unexpected number of test results in database.');
       }
     })
-    .catch((e) => {
-      console.error(e);
-      res.status(500).send("ERROR: Either the connection to the database isn't working or the query is incorrect");
+    .catch((err) => {
+      const msg = `Attempt to verify API status failed: ${err}`;
+      console.error(msg);
+      res.status(500).send(msg);
     })
 });
 
