@@ -17,41 +17,36 @@ let open = require('sqlite').open;
     driver: sqlite3.Database
   })
 
+  // Requests for SMS notification.
   await db.run(`CREATE TABLE IF NOT EXISTS to_notify
                 (
                     id                    INTEGER PRIMARY KEY AUTOINCREMENT,
-                    requestTime           timestamp DATE DEFAULT (DATETIME('now')),
-                    preferredLanguage     text,
-                    notificationTelephone text,
-                    specimenId            text
+                    requestTime           TIMESTAMP DATE DEFAULT (DATETIME('now')),
+                    preferredLanguage     TEXT,
+                    notificationTelephone TEXT,
+                    specimenId            TEXT
                 )`,
     (err) => {
       if (err) {
-        console.log("🚀 ----------------------------------------")
-        console.log("🚀 ~ file: server.js ~ line 27 ~ err", err)
-        console.log("🚀 ----------------------------------------")
-        // Table already created
+        console.error('Attempted to create to_notify table:', err)
       } else {
-        // Table just created, creating some rows
+        console.log('Created to_notify table.')
       }
     }
   );
 
-  // Record delivery of Negative test results.
+  // Delivery of Negative test results.
   await db.run(`CREATE TABLE IF NOT EXISTS viewed_result
                 (
                     id         INTEGER PRIMARY KEY AUTOINCREMENT,
-                    viewedTime timestamp DATE DEFAULT (DATETIME('now')),
-                    specimenId integer
+                    viewedTime TIMESTAMP DATE DEFAULT (DATETIME('now')),
+                    specimenId INTEGER
                 )`,
     (err) => {
       if (err) {
-        console.log("🚀 ----------------------------------------")
-        console.log("🚀 ~ file: server.js ~ line 43 ~ err", err)
-        console.log("🚀 ----------------------------------------")
-        // Table already created
+        console.error('Attempted to create viewed_result table:', err)
       } else {
-        // Table just created, creating some rows
+        console.log('Created viewed_result table.')
       }
     }
   );
