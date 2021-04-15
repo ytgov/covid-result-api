@@ -262,21 +262,21 @@ app.get('/to-notify', async (req, res) => {
   })
 
   // Limit results to just the past week of notification requests.
-  const query = `SELECT specimenId, notificationTelephone, preferredLanguage
+  const query = `SELECT DISTINCT specimenId, notificationTelephone, preferredLanguage
                  FROM to_notify
                  WHERE specimenId IS NOT NULL
                    AND requestTime > DATE('now', '-7 days')`;
 
-  await db.all(query,
-    (err, rows) => {
+  const notifications = await db.all(query,
+    (err) => {
     if (err) {
       const msg = `Attempt to retrieve recent SMS notifications failed: ${err}`;
       console.error(msg);
       res.status(500).send(msg);
-    } else {
-      res.status(200).send(rows);
     }
   });
+
+  res.status(200).send(notifications);
 });
 
 
