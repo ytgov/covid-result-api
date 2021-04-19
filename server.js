@@ -15,7 +15,7 @@ let open = require('sqlite').open;
 app.use(express.json()) // for parsing application/json
 app.use(express.urlencoded({extended: true})) // for parsing application/x-www-form-urlencoded
 
-let conn = knex({
+app.set("mssqlDb", knex({
   client: 'mssql',
   connection: {
     host: process.env.DB_HOST,
@@ -26,9 +26,7 @@ let conn = knex({
       enableArithAbort: true,
     }
   }
-});
-
-app.set("db", conn);
+}));
 
 app.set('sqliteDb', knex({
   client: 'sqlite3',
@@ -41,9 +39,9 @@ app.set('sqliteDb', knex({
 
 // Create the SQLite tables, as necessary.
 (async () => {
-  try {
-    const sqliteDb = app.get('sqliteDb')
+  const sqliteDb = app.get('sqliteDb')
 
+  try {
     await Promise.all([
       // Requests for SMS notification.
       sqliteDb.schema.hasTable('to_notify')
@@ -70,16 +68,15 @@ app.set('sqliteDb', knex({
           }
         })
     ])
-  }
-  catch (err) {
+  } catch (err) {
     console.error(`Attempt to create table failed: ${err}`)
   }
-})();
+})()
 
 
 // Verify connection to database and existing data for necessary columns.
 app.get('/status', async (req, res) => {
-  const db = req.app.get('db')
+  const db = req.app.get('mssqlDb')
 
   try {
     const rows = await db.select('PatientName', 'DOB', 'CollectionDateTime', 'ResultedDateTime', 'Result', 'SpecimenID')
@@ -93,8 +90,7 @@ app.get('/status', async (req, res) => {
     const msg = 'API status verified.'
     console.log(msg)
     res.status(200).send(msg)
-  }
-  catch (err) {
+  } catch (err) {
     const msg = `Attempt to verify API status failed: ${err}`
     console.error(msg)
     res.status(500).send(msg)
@@ -103,96 +99,88 @@ app.get('/status', async (req, res) => {
 
 
 // Retrieve a test result.
-app.put('/test-result', (req, res) => {
-  const db = req.app.get('db');
-
+app.put('/test-result', async (req, res) => {
   /** @namespace body.lastName **/
   /** @namespace body.healthCareNumber **/
   /** @namespace body.birthDate **/
-  const {body} = req;
+  const {body} = req
 
   if (!body.lastName || !body.healthCareNumber || !body.birthDate) {
-    res.status(400).send("Bad request");
+    res.status(400).send("Bad request")
     return
   }
 
-  const healthCareNumber = body.healthCareNumber.replace(/-/g, '');
-  const dob = body.birthDate.replace(/-/g, '');
-  const lastName = body.lastName.toUpperCase();
+  const healthCareNumber = body.healthCareNumber.replace(/-/g, '')
+  const dob = body.birthDate.replace(/-/g, '')
+  const lastName = body.lastName.toUpperCase()
+  const mssqlDb = req.app.get('mssqlDb')
 
-  db.select('PatientName', 'DOB', 'CollectionDateTime', 'ResultedDateTime', 'Result', 'SpecimenID')
-    .from('CovidTestResults')
-    .where('HCN', healthCareNumber)
-    .where('DOB', dob)
-    .where('LastName', lastName)
-    .orderBy('CollectionDateTime', 'DESC')
-    .orderByRaw('COALESCE(ResultedDateTime, CURRENT_TIMESTAMP) DESC')
-    .limit(1)
-    .then(rows => {
-      if (rows.length === 0) {
-        res.status(404).send("The requested test result was Not Found.");
-        return;
-      }
+  try {
+    const rows = await mssqlDb.select('PatientName', 'DOB', 'CollectionDateTime', 'ResultedDateTime', 'Result', 'SpecimenID')
+      .from('CovidTestResults')
+      .where('HCN', healthCareNumber)
+      .where('DOB', dob)
+      .where('LastName', lastName)
+      .orderBy('CollectionDateTime', 'DESC')
+      .orderByRaw('COALESCE(ResultedDateTime, CURRENT_TIMESTAMP) DESC')
+      .limit(1)
 
-      /** @namespace testResult.PatientName **/
-      /** @namespace testResult.DOB **/
-      /** @namespace testResult.CollectionDateTime **/
-      /** @namespace testResult.ResultedDateTime **/
-      /** @namespace testResult.Result **/
-      /** @namespace testResult.SpecimenID **/
-      const testResult = rows[0];
+    if (rows.length === 0) {
+      res.status(404).send("The requested test result was Not Found.")
+      return
+    }
 
-      if (testResult.Result && /^Negative\.?$/.test(String(testResult.Result).trim())) {
+    /** @namespace testResult.PatientName **/
+    /** @namespace testResult.DOB **/
+    /** @namespace testResult.CollectionDateTime **/
+    /** @namespace testResult.ResultedDateTime **/
+    /** @namespace testResult.Result **/
+    /** @namespace testResult.SpecimenID **/
+    const testResult = rows[0]
+
+    if (testResult.Result && /^Negative\.?$/.test(String(testResult.Result).trim())) {
+      const sqliteDb = app.get('sqliteDb')
+
+      try {
         // Record the delivery of the Negative result, including the opaque Specimen ID.
-        (async () => {
-          const db = await open({
-            filename: './database.db',
-            driver: sqlite3.Database
-          });
-
-          const dbInsert = 'INSERT INTO viewed_result (specimenId) VALUES (?)';
-          await db.run(dbInsert, [testResult.SpecimenID],
-            (err) => {
-              if (err) {
-                console.error(`Attempt to insert into viewed_result failed: ${err}`)
-              }
-            });
-
-          // Data retention period is 1 year.
-          const dbDelete = "DELETE FROM viewed_result WHERE viewedTime < DATE('now', '-1 year')";
-          await db.run(dbDelete, [],
-            (err) => {
-              if (err) {
-                console.error(`Attempt to delete from viewed_result failed: ${err}`)
-              }
-            });
-        })();
-
-        const responseBody = {
-          "patientName": testResult.PatientName.trim().toLowerCase().replace(/\w\S*/g, (w) => (w.replace(/^\w/, (c) => c.toUpperCase()))),
-          "birthDate": testResult.DOB.substring(0, 4) + "-" + testResult.DOB.substring(4, 6) + '-' + testResult.DOB.substring(6, testResult.DOB.length),
-          "collectionTimestamp": testResult.CollectionDateTime,
-          "resultEnteredTimestamp": testResult.ResultedDateTime,
-          "result": 'Negative',
-        }
-
-        res.status(200).json(responseBody);
-        return;
+        await sqliteDb('viewed_result')
+          .insert({specimenId: testResult.SpecimenID})
+      } catch (err) {
+        console.error(`Attempt to insert into viewed_result failed: ${err}`)
       }
 
-      res.status(204).send("The requested test result is Not Ready.");
-    })
-    .catch((err) => {
-      const msg = `Attempt to retrieve test result failed: ${err}`;
-      console.error(msg);
-      res.status(500).send(msg);
-    })
-});
+      try {
+        // Data retention period is 1 year.
+        await sqliteDb('viewed_result')
+          .where('viewedTime', '<', moment().subtract(1, 'year').toDate()).delete()
+      } catch (err) {
+        console.error(`Attempt to delete from viewed_result failed: ${err}`)
+      }
+
+      const responseBody = {
+        "patientName": testResult.PatientName.trim().toLowerCase().replace(/\w\S*/g, (w) => (w.replace(/^\w/, (c) => c.toUpperCase()))),
+        "birthDate": testResult.DOB.substring(0, 4) + "-" + testResult.DOB.substring(4, 6) + '-' + testResult.DOB.substring(6, testResult.DOB.length),
+        "collectionTimestamp": testResult.CollectionDateTime,
+        "resultEnteredTimestamp": testResult.ResultedDateTime,
+        "result": 'Negative',
+      }
+
+      res.status(200).json(responseBody)
+    } else {
+      // Response for any test result not explicitly Negative.
+      res.status(204).send("The requested test result is Not Ready.")
+    }
+  } catch (err) {
+    const msg = `Attempt to retrieve test result failed: ${err}`
+    console.error(msg)
+    res.status(500).send(msg)
+  }
+})
 
 
 // Request an SMS notification once a test result is ready.
 app.put('/notification-request', async (req, res) => {
-  const db = req.app.get('db');
+  const db = req.app.get('mssqlDb');
 
   /** @namespace body.lastName **/
   /** @namespace body.healthCareNumber **/
