@@ -1,3 +1,5 @@
+// noinspection ExceptionCaughtLocallyJS
+
 require('dotenv').config();
 
 let knex = require('knex');
@@ -70,27 +72,28 @@ app.set("db", conn);
 
 
 // Verify connection to database and existing data for necessary columns.
-app.get('/status', function (req, res) {
-  const db = req.app.get('db');
+app.get('/status', async (req, res) => {
+  const db = req.app.get('db')
 
-  db.select('PatientName', 'DOB', 'CollectionDateTime', 'ResultedDateTime', 'Result', 'SpecimenID')
-    .from('CovidTestResults')
-    .limit(5)
-    .then(rows => {
-      if (rows.length === 5) {
-        const msg = 'API status verified.'
-        console.log(msg);
-        res.status(200).send(msg);
-      } else {
-        throw new Error('Unexpected number of test results in database.');
-      }
-    })
-    .catch((err) => {
-      const msg = `Attempt to verify API status failed: ${err}`;
-      console.error(msg);
-      res.status(500).send(msg);
-    })
-});
+  try {
+    const rows = await db.select('PatientName', 'DOB', 'CollectionDateTime', 'ResultedDateTime', 'Result', 'SpecimenID')
+      .from('CovidTestResults')
+      .limit(5)
+
+    if (rows.length !== 5) {
+      throw new Error('Unexpected number of test results in database.')
+    }
+
+    const msg = 'API status verified.'
+    console.log(msg)
+    res.status(200).send(msg)
+  }
+  catch (err) {
+    const msg = `Attempt to verify API status failed: ${err}`
+    console.error(msg)
+    res.status(500).send(msg)
+  }
+})
 
 
 // Retrieve a test result.
