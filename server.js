@@ -11,47 +11,6 @@ let sqlite3 = require('sqlite3');
 sqlite3.verbose();
 let open = require('sqlite').open;
 
-// this is a top-level await 
-(async () => {
-  // open the database
-  const db = await open({
-    filename: './database.db',
-    driver: sqlite3.Database
-  })
-
-  // Requests for SMS notification.
-  await db.run(`CREATE TABLE IF NOT EXISTS to_notify
-                (
-                    id                    INTEGER PRIMARY KEY AUTOINCREMENT,
-                    requestTime           TIMESTAMP DATE DEFAULT (DATETIME('now')),
-                    preferredLanguage     TEXT,
-                    notificationTelephone TEXT,
-                    specimenId            TEXT
-                )`,
-    (err) => {
-      if (err) {
-        console.error(`Attempt to create to_notify table failed: ${err}`)
-      }
-    }
-  );
-
-  // Delivery of Negative test results.
-  await db.run(`CREATE TABLE IF NOT EXISTS viewed_result
-                (
-                    id         INTEGER PRIMARY KEY AUTOINCREMENT,
-                    viewedTime TIMESTAMP DATE DEFAULT (DATETIME('now')),
-                    specimenId INTEGER
-                )`,
-    (err) => {
-      if (err) {
-        console.error(`Attempt to create viewed_result table failed: ${err}`)
-      }
-    }
-  );
-
-})();
-
-
 app.use(express.json()) // for parsing application/json
 app.use(express.urlencoded({extended: true})) // for parsing application/x-www-form-urlencoded
 
@@ -69,6 +28,52 @@ let conn = knex({
 });
 
 app.set("db", conn);
+
+app.set('sqliteDb', knex({
+  client: 'sqlite3',
+  connection: {
+    filename: './database.db',
+  },
+  useNullAsDefault: true
+}));
+
+
+// Create the SQLite tables, as necessary.
+(async () => {
+  try {
+    const sqliteDb = app.get('sqliteDb')
+
+    await Promise.all([
+      // Requests for SMS notification.
+      sqliteDb.schema.hasTable('to_notify')
+        .then(exists => {
+          if (!exists) {
+            return sqliteDb.schema.createTable('to_notify', t => {
+              t.increments('id')
+              t.timestamp('requestTime').defaultTo(sqliteDb.fn.now())
+              t.text('preferredLanguage')
+              t.text('notificationTelephone')
+              t.integer('specimenId')
+            })
+          }
+        }),
+      // Delivery of Negative test results.
+      sqliteDb.schema.hasTable('viewed_result')
+        .then(exists => {
+          if (!exists) {
+            return sqliteDb.schema.createTable('viewed_result', t => {
+              t.increments('id')
+              t.timestamp('viewedTime').defaultTo(sqliteDb.fn.now())
+              t.integer('specimenId')
+            })
+          }
+        })
+    ])
+  }
+  catch (err) {
+    console.error(`Attempt to create table failed: ${err}`)
+  }
+})();
 
 
 // Verify connection to database and existing data for necessary columns.
