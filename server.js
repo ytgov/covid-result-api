@@ -1,9 +1,10 @@
 // noinspection ExceptionCaughtLocallyJS
 
 // Get a COVID-19 test result service: Middleware API component
-// Implements the get-a-covid-19-test-result API
-// https://app.swaggerhub.com/apis/GOY/get-a-covid-19-test-result/1.3.0
+// The component exposes the API endpoints documented in
+// https://app.swaggerhub.com/apis/GOY/get-a-covid-19-test-result
 // © Government of Yukon 2021
+// Authored by Bizont, Inc <hello@bizont.ca>; Dave Rogers <dave.rogers@yukon.ca>
 
 require('dotenv').config()
 let knex = require('knex')

@@ -29,3 +29,14 @@ The component is intended to run from within a Docker container.
    and able to connect to the database:
    `curl -v http://<docker-server>:<external-port>/`. Expect an HTTP 200 response with
    the message "Successful Connection".
+
+## Test against UAT database
+
+Run the `test-uat` script against the component configured to read from the sample
+database:
+
+    ./test-uat http://<docker-server>:<external-port>
+
+If no output is shown, the tests were successful.
+The test script will cause records to be written to the SQLite `to_notify` and
+`viewed_result` tables.
