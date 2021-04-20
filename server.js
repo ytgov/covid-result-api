@@ -1,17 +1,16 @@
 // noinspection ExceptionCaughtLocallyJS
 
-require('dotenv').config();
+// Get a COVID-19 test result service: Middleware API component
+// Implements the get-a-covid-19-test-result API
+// https://app.swaggerhub.com/apis/GOY/get-a-covid-19-test-result/1.3.0
+// © Government of Yukon 2021
 
-let knex = require('knex');
-let express = require('express');
-let moment = require('moment');
-let app = express();
-let port = process.env.PORT || 3000;
+require('dotenv').config()
+let knex = require('knex')
+let express = require('express')
+let moment = require('moment')
 
-let sqlite3 = require('sqlite3');
-sqlite3.verbose();
-let open = require('sqlite').open;
-
+let app = express()
 app.use(express.json()) // for parsing application/json
 app.use(express.urlencoded({extended: true})) // for parsing application/x-www-form-urlencoded
 
@@ -26,7 +25,7 @@ app.set("mssqlDb", knex({
       enableArithAbort: true,
     }
   }
-}));
+}))
 
 app.set('sqliteDb', knex({
   client: 'sqlite3',
@@ -34,11 +33,11 @@ app.set('sqliteDb', knex({
     filename: './database.db',
   },
   useNullAsDefault: true
-}));
+}))
 
 
 // Create the SQLite tables, as necessary.
-(async () => {
+;(async () => {
   const sqliteDb = app.get('sqliteDb')
 
   try {
@@ -251,37 +250,23 @@ app.put('/notification-request', async (req, res) => {
 })
 
 
-// Retrieve the recent notification requests.
+// Retrieve the recent notification requests that now have results.
 app.get('/to-notify', async (req, res) => {
-  // open the database
-  const db = await open({
-    filename: './database.db',
-    driver: sqlite3.Database
-  })
+  const sqliteDb = req.app.get('sqliteDb')
 
-  let errMessage = '';
+  try {
+    // Limit results to just the past week of notification requests.
+    const notifications = await sqliteDb('to_notify')
+      .distinct('specimenId', 'notificationTelephone', 'preferredLanguage')
+      .where('requestTime', '>', moment().subtract(7, 'days').toDate())
 
-  // Limit results to just the past week of notification requests.
-  const query = `SELECT DISTINCT specimenId, notificationTelephone, preferredLanguage
-                 FROM to_notify
-                 WHERE specimenId IS NOT NULL
-                   AND requestTime > DATE('now', '-7 days')`;
-
-  const notifications = await db.all(query,
-    (err) => {
-    if (err) {
-      errMessage = `Attempt to retrieve recent SMS notifications failed: ${err}`;
-    }
-  });
-
-  if (errMessage !== '') {
-    console.error(errMessage);
-    res.status(500).send(errMessage);
-    return;
+    res.status(200).send(notifications)
+  } catch (err) {
+    const msg = `Attempt to retrieve recent SMS notifications failed: ${err}`
+    console.error(msg)
+    res.status(500).send(msg)
   }
-
-  res.status(200).send(notifications);
-});
+})
 
 
-app.listen(port);
+app.listen(process.env.PORT || 3000)
