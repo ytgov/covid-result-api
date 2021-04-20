@@ -18,7 +18,7 @@ The component is intended to run from within a Docker container.
 2. Create the environment file from the template: `cp .env.base .env`
 3. Populate the `.env` environment file with the Meditech test result database
    credentials.
-4. Copy `database.db.sample` to `database.db` which will be the running SQLite database
+4. Copy `database.db.base` to `database.db` which will be the running SQLite database
    file. The database is initially empty.
 5. Create `docker-compose.override.yml` from the instructions in `docker-compose.yml`
    and set the external port number.
@@ -29,3 +29,14 @@ The component is intended to run from within a Docker container.
    and able to connect to the database:
    `curl -v http://<docker-server>:<external-port>/`. Expect an HTTP 200 response with
    the message "Successful Connection".
+
+## Test against UAT database
+
+Run the `test-uat` script against the component configured to read from the sample
+database:
+
+    ./test-uat http://<docker-server>:<external-port>
+
+If no output is shown, the tests were successful.
+The test script will cause records to be written to the SQLite `to_notify` and
+`viewed_result` tables.
