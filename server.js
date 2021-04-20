@@ -146,14 +146,17 @@ app.put('/test-result', async (req, res) => {
         await sqliteDb('viewed_result')
           .insert({specimenId: testResult.SpecimenID})
       } catch (err) {
+        // Not a service-breaking error, so log and continue.
         console.error(`Attempt to insert into viewed_result failed: ${err}`)
       }
 
       try {
         // Data retention period is 1 year.
         await sqliteDb('viewed_result')
-          .where('viewedTime', '<', moment().subtract(1, 'year').toDate()).delete()
+          .where('viewedTime', '<', moment().subtract(1, 'year').toDate())
+          .delete()
       } catch (err) {
+        // Not a service-breaking error, so log and continue.
         console.error(`Attempt to delete from viewed_result failed: ${err}`)
       }
 
@@ -180,74 +183,69 @@ app.put('/test-result', async (req, res) => {
 
 // Request an SMS notification once a test result is ready.
 app.put('/notification-request', async (req, res) => {
-  const db = req.app.get('mssqlDb');
-
   /** @namespace body.lastName **/
   /** @namespace body.healthCareNumber **/
   /** @namespace body.birthDate **/
   /** @namespace body.notificationTelephone **/
   /** @namespace body.preferredLanguage **/
-  const {body} = req;
+  const {body} = req
 
   if (!body.lastName || !body.healthCareNumber || !body.birthDate || !body.notificationTelephone || !body.preferredLanguage) {
-    res.status(400).send("Bad request");
+    res.status(400).send("Bad request")
     return
   }
 
-  const healthCareNumber = body.healthCareNumber.replace(/-/g, '');
-  const dob = body.birthDate.replace(/-/g, '');
-  const lastName = body.lastName.toUpperCase();
+  const healthCareNumber = body.healthCareNumber.replace(/-/g, '')
+  const dob = body.birthDate.replace(/-/g, '')
+  const lastName = body.lastName.toUpperCase()
 
-  db.select('SpecimenID')
-    .from('CovidTestResults')
-    .where('HCN', healthCareNumber)
-    .where('DOB', dob)
-    .where('LastName', lastName)
-    .orderBy('CollectionDateTime', 'DESC')
-    .orderByRaw('COALESCE(ResultedDateTime, CURRENT_TIMESTAMP) DESC')
-    .limit(1)
-    .then(rows => {
-      if (rows.length === 0) {
-        res.status(404).send("The requested test result was Not Found.");
-        return;
-      }
+  const mssqlDb = req.app.get('mssqlDb')
+  const sqliteDb = app.get('sqliteDb')
 
-      /** @namespace testResult.SpecimenID **/
-      const testResult = rows[0];
+  try {
+    const rows = await mssqlDb.select('SpecimenID')
+      .from('CovidTestResults')
+      .where('HCN', healthCareNumber)
+      .where('DOB', dob)
+      .where('LastName', lastName)
+      .orderBy('CollectionDateTime', 'DESC')
+      .orderByRaw('COALESCE(ResultedDateTime, CURRENT_TIMESTAMP) DESC')
+      .limit(1)
 
-      (async () => {
-        const db = await open({
-          filename: './database.db',
-          driver: sqlite3.Database
-        })
+    if (rows.length === 0) {
+      res.status(404).send("The requested test result was Not Found.")
+      return
+    }
 
-        let dbInsert = 'INSERT INTO to_notify (specimenId, notificationTelephone, preferredLanguage) VALUES (?,?,?)';
-        await db.run(dbInsert, [testResult.SpecimenID, body.notificationTelephone, body.preferredLanguage],
-          (err) => {
-            if (err) {
-              console.error(`Attempt to insert into to_notify failed: ${err}`)
-            }
-          });
+    /** @namespace testResult.SpecimenID **/
+    const testResult = rows[0]
 
-        // Data retention period is 1 year.
-        const dbDelete = "DELETE FROM to_notify WHERE requestTime < DATE('now', '-1 year')";
-        await db.run(dbDelete, [],
-          (err) => {
-            if (err) {
-              console.error(`Attempt to delete from to_notify failed: ${err}`)
-            }
-          });
+    try {
+      // Record the delivery of the Negative result, including the opaque Specimen ID.
+      await sqliteDb('to_notify')
+        .insert({specimenId: testResult.SpecimenID, notificationTelephone: body.notificationTelephone, preferredLanguage: body.preferredLanguage})
+    } catch (err) {
+      console.error(`Attempt to insert into to_notify failed: ${err}`)
+      throw new Error('Unable to record the request for an SMS notification.')
+    }
 
-        res.status(200).send({message: "SMS notification has been requested."});
-      })();
+    try {
+      // Data retention period is 1 year.
+      await sqliteDb('to_notify')
+        .where('requestTime', '<', moment().subtract(1, 'year').toDate())
+        .delete()
+    } catch (err) {
+      // Not a service-breaking error, so log and continue.
+      console.error(`Attempt to delete from to_notify failed: ${err}`)
+    }
 
-    })
-    .catch((err) => {
-      const msg = `Attempt to request an SMS notification failed: ${err}`;
-      console.error(msg);
-      res.status(500).send(msg);
-    })
-});
+    res.status(200).send({message: "SMS notification has been requested."});
+  } catch (err) {
+    const msg = `Attempt to request an SMS notification failed: ${err}`
+    console.error(msg)
+    res.status(500).send(msg)
+  }
+})
 
 
 // Retrieve the recent notification requests.
