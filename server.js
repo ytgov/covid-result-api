@@ -74,6 +74,12 @@ app.set('sqliteDb', knex({
 })()
 
 
+// A test result is Negative if the result is exactly "Negative" or "Negative.".
+function isNegativeTestResult(testResult) {
+  return testResult && /^Negative\.?$/.test(String(testResult).trim())
+}
+
+
 // Verify connection to database and existing data for necessary columns.
 app.get('/status', async (req, res) => {
   const mssqlDb = req.app.get('mssqlDb')
@@ -138,7 +144,7 @@ app.put('/test-result', async (req, res) => {
     /** @namespace testResult.SpecimenID **/
     const testResult = rows[0]
 
-    if (testResult.Result && /^Negative\.?$/.test(String(testResult.Result).trim())) {
+    if (isNegativeTestResult(testResult.Result)) {
       const sqliteDb = req.app.get('sqliteDb')
 
       try {
@@ -160,15 +166,13 @@ app.put('/test-result', async (req, res) => {
         console.error(`Attempt to delete from viewed_result failed: ${err}`)
       }
 
-      const responseBody = {
+      res.status(200).json({
         "patientName": testResult.PatientName.trim().toLowerCase().replace(/\w\S*/g, (w) => (w.replace(/^\w/, (c) => c.toUpperCase()))),
         "birthDate": testResult.DOB.substring(0, 4) + "-" + testResult.DOB.substring(4, 6) + '-' + testResult.DOB.substring(6, testResult.DOB.length),
         "collectionTimestamp": testResult.CollectionDateTime,
         "resultEnteredTimestamp": testResult.ResultedDateTime,
         "result": 'Negative',
-      }
-
-      res.status(200).json(responseBody)
+      })
     } else {
       // Response for any test result not explicitly Negative.
       res.status(204).send("The requested test result is Not Ready.")
