@@ -76,10 +76,10 @@ app.set('sqliteDb', knex({
 
 // Verify connection to database and existing data for necessary columns.
 app.get('/status', async (req, res) => {
-  const db = req.app.get('mssqlDb')
+  const mssqlDb = req.app.get('mssqlDb')
 
   try {
-    const rows = await db.select('PatientName', 'DOB', 'CollectionDateTime', 'ResultedDateTime', 'Result', 'SpecimenID')
+    const rows = await mssqlDb.select('PatientName', 'DOB', 'CollectionDateTime', 'ResultedDateTime', 'Result', 'SpecimenID')
       .from('CovidTestResults')
       .limit(5)
 
@@ -139,7 +139,7 @@ app.put('/test-result', async (req, res) => {
     const testResult = rows[0]
 
     if (testResult.Result && /^Negative\.?$/.test(String(testResult.Result).trim())) {
-      const sqliteDb = app.get('sqliteDb')
+      const sqliteDb = req.app.get('sqliteDb')
 
       try {
         // Record the delivery of the Negative result, including the opaque Specimen ID.
@@ -198,9 +198,7 @@ app.put('/notification-request', async (req, res) => {
   const healthCareNumber = body.healthCareNumber.replace(/-/g, '')
   const dob = body.birthDate.replace(/-/g, '')
   const lastName = body.lastName.toUpperCase()
-
   const mssqlDb = req.app.get('mssqlDb')
-  const sqliteDb = app.get('sqliteDb')
 
   try {
     const rows = await mssqlDb.select('SpecimenID')
@@ -219,6 +217,7 @@ app.put('/notification-request', async (req, res) => {
 
     /** @namespace testResult.SpecimenID **/
     const testResult = rows[0]
+    const sqliteDb = req.app.get('sqliteDb')
 
     try {
       // Record the delivery of the Negative result, including the opaque Specimen ID.
