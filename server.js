@@ -7,15 +7,15 @@
 // Authored by Bizont, Inc <hello@bizont.ca>; Dave Rogers <dave.rogers@yukon.ca>
 
 require('dotenv').config()
-let knex = require('knex')
-let express = require('express')
-let moment = require('moment')
+const knex = require('knex')
+const express = require('express')
+const moment = require('moment')
 
-let app = express()
+const app = express()
 app.use(express.json()) // for parsing application/json
-app.use(express.urlencoded({extended: true})) // for parsing application/x-www-form-urlencoded
+app.use(express.urlencoded({ extended: true })) // for parsing application/x-www-form-urlencoded
 
-app.set("mssqlDb", knex({
+app.set('mssqlDb', knex({
   client: 'mssql',
   connection: {
     host: process.env.DB_HOST,
@@ -23,7 +23,7 @@ app.set("mssqlDb", knex({
     password: process.env.DB_PASS,
     database: process.env.DB_NAME,
     options: {
-      enableArithAbort: true,
+      enableArithAbort: true
     }
   }
 }))
@@ -31,11 +31,10 @@ app.set("mssqlDb", knex({
 app.set('sqliteDb', knex({
   client: 'sqlite3',
   connection: {
-    filename: './database.db',
+    filename: './database.db'
   },
   useNullAsDefault: true
 }))
-
 
 // Create the SQLite tables, as necessary.
 ;(async () => {
@@ -73,12 +72,10 @@ app.set('sqliteDb', knex({
   }
 })()
 
-
 // A test result is Negative if the result is exactly "Negative" or "Negative.".
-function isNegativeTestResult(testResult) {
+function isNegativeTestResult (testResult) {
   return (!!testResult) && /^Negative\.?$/.test(String(testResult).trim())
 }
-
 
 // Verify connection to database and existing data for necessary columns.
 app.get('/status', async (req, res) => {
@@ -103,16 +100,15 @@ app.get('/status', async (req, res) => {
   }
 })
 
-
 // Retrieve a test result.
 app.put('/test-result', async (req, res) => {
   /** @namespace body.lastName **/
   /** @namespace body.healthCareNumber **/
   /** @namespace body.birthDate **/
-  const {body} = req
+  const { body } = req
 
   if (!body.lastName || !body.healthCareNumber || !body.birthDate) {
-    res.status(400).send("Bad request")
+    res.status(400).send('Bad request')
     return
   }
 
@@ -132,7 +128,7 @@ app.put('/test-result', async (req, res) => {
       .limit(1)
 
     if (rows.length === 0) {
-      res.status(404).send("The requested test result was Not Found.")
+      res.status(404).send('The requested test result was Not Found.')
       return
     }
 
@@ -150,7 +146,7 @@ app.put('/test-result', async (req, res) => {
       try {
         // Record the delivery of the Negative result, including the opaque Specimen ID.
         await sqliteDb('viewed_result')
-          .insert({specimenId: testResult.SpecimenID})
+          .insert({ specimenId: testResult.SpecimenID })
       } catch (err) {
         // Not a service-breaking error, so log and continue.
         console.error(`Attempt to insert into viewed_result failed: ${err}`)
@@ -167,15 +163,15 @@ app.put('/test-result', async (req, res) => {
       }
 
       res.status(200).json({
-        "patientName": testResult.PatientName.trim().toLowerCase().replace(/\w\S*/g, (w) => (w.replace(/^\w/, (c) => c.toUpperCase()))),
-        "birthDate": testResult.DOB.substring(0, 4) + "-" + testResult.DOB.substring(4, 6) + '-' + testResult.DOB.substring(6, testResult.DOB.length),
-        "collectionTimestamp": testResult.CollectionDateTime,
-        "resultEnteredTimestamp": testResult.ResultedDateTime,
-        "result": 'Negative',
+        patientName: testResult.PatientName.trim().toLowerCase().replace(/\w\S*/g, (w) => (w.replace(/^\w/, (c) => c.toUpperCase()))),
+        birthDate: testResult.DOB.substring(0, 4) + '-' + testResult.DOB.substring(4, 6) + '-' + testResult.DOB.substring(6, testResult.DOB.length),
+        collectionTimestamp: testResult.CollectionDateTime,
+        resultEnteredTimestamp: testResult.ResultedDateTime,
+        result: 'Negative'
       })
     } else {
       // Response for any test result not explicitly Negative.
-      res.status(204).send("The requested test result is Not Ready.")
+      res.status(204).send('The requested test result is Not Ready.')
     }
   } catch (err) {
     const msg = `Attempt to retrieve test result failed: ${err}`
@@ -184,7 +180,6 @@ app.put('/test-result', async (req, res) => {
   }
 })
 
-
 // Request an SMS notification once a test result is ready.
 app.put('/notification-request', async (req, res) => {
   /** @namespace body.lastName **/
@@ -192,10 +187,10 @@ app.put('/notification-request', async (req, res) => {
   /** @namespace body.birthDate **/
   /** @namespace body.notificationTelephone **/
   /** @namespace body.preferredLanguage **/
-  const {body} = req
+  const { body } = req
 
   if (!body.lastName || !body.healthCareNumber || !body.birthDate || !body.notificationTelephone || !body.preferredLanguage) {
-    res.status(400).send("Bad request")
+    res.status(400).send('Bad request')
     return
   }
 
@@ -215,7 +210,7 @@ app.put('/notification-request', async (req, res) => {
       .limit(1)
 
     if (rows.length === 0) {
-      res.status(404).send("The requested test result was Not Found.")
+      res.status(404).send('The requested test result was Not Found.')
       return
     }
 
@@ -226,7 +221,7 @@ app.put('/notification-request', async (req, res) => {
     try {
       // Record the delivery of the Negative result, including the opaque Specimen ID.
       await sqliteDb('to_notify')
-        .insert({specimenId: testResult.SpecimenID, notificationTelephone: body.notificationTelephone, preferredLanguage: body.preferredLanguage})
+        .insert({ specimenId: testResult.SpecimenID, notificationTelephone: body.notificationTelephone, preferredLanguage: body.preferredLanguage })
     } catch (err) {
       console.error(`Attempt to insert into to_notify failed: ${err}`)
       throw new Error('Unable to record the request for an SMS notification.')
@@ -242,14 +237,13 @@ app.put('/notification-request', async (req, res) => {
       console.error(`Attempt to delete from to_notify failed: ${err}`)
     }
 
-    res.status(200).send({message: "SMS notification has been requested."});
+    res.status(200).send('SMS notification has been requested.')
   } catch (err) {
     const msg = `Attempt to request an SMS notification failed: ${err}`
     console.error(msg)
     res.status(500).send(msg)
   }
 })
-
 
 // Retrieve the recent notification requests that now have results.
 app.get('/to-notify', async (req, res) => {
@@ -265,7 +259,7 @@ app.get('/to-notify', async (req, res) => {
     // Build the list of notifications from candidates that have received Negative test
     // results. Leaving this a simple loop because filtering the candidates array
     /// directly from the knex promises is a hair-raising proposition.
-    let notifications = []
+    const notifications = []
 
     for (const candidate of candidates) {
       try {
@@ -291,6 +285,5 @@ app.get('/to-notify', async (req, res) => {
     res.status(500).send(msg)
   }
 })
-
 
 app.listen(process.env.PORT || 3000)
