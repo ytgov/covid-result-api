@@ -75,7 +75,7 @@ app.set('sqliteDb', knex({
 
 // A test result is Negative if the result is exactly "Negative" or "Negative.".
 function isNegativeTestResult(testResult) {
-  return testResult && /^Negative\.?$/.test(String(testResult).trim())
+  return (!!testResult) && /^Negative\.?$/.test(String(testResult).trim())
 }
 
 
@@ -253,12 +253,35 @@ app.put('/notification-request', async (req, res) => {
 // Retrieve the recent notification requests that now have results.
 app.get('/to-notify', async (req, res) => {
   const sqliteDb = req.app.get('sqliteDb')
+  const mssqlDb = req.app.get('mssqlDb')
 
   try {
     // Limit results to just the past week of notification requests.
-    const notifications = await sqliteDb('to_notify')
+    const candidates = await sqliteDb('to_notify')
       .distinct('specimenId', 'notificationTelephone', 'preferredLanguage')
       .where('requestTime', '>', moment().subtract(7, 'days').toDate())
+
+    // Build the list of notifications from candidates that have received Negative test
+    // results. Leaving this a simple loop because filtering the candidates array
+    /// directly from the knex promises is a hair-raising proposition.
+    let notifications = []
+
+    for (const candidate of candidates) {
+      try {
+        const row = await mssqlDb('CovidTestResults')
+          .first('Result')
+          .where('SpecimenId', candidate.specimenId)
+          .orderBy('CollectionDateTime', 'DESC')
+          .orderByRaw('COALESCE(ResultedDateTime, CURRENT_TIMESTAMP) DESC')
+
+        if (isNegativeTestResult(row.Result)) {
+          notifications.push(candidate)
+        }
+      } catch (err) {
+        // Not a service-breaking error, so log and continue.
+        console.error(`Attempt to verify SMS notification test result failed: ${err}`)
+      }
+    }
 
     res.status(200).send(notifications)
   } catch (err) {
