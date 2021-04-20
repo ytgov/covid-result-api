@@ -1,0 +1,139 @@
+#!/bin/bash
+
+# Simple API test script to exercise the known data in the UAT database.
+# Requires HTTPie
+
+if [ $# -ne 1 ]; then
+    >&2 echo "Usage: ${0} BASE-API-URL"
+    exit 1
+fi
+
+api="${1%/}"
+
+r=$(http --print=hb "${api}/status" | tr -d "\r\n")
+echo "${r}" | egrep -q "200 OK" || echo "/status failed: ${r}"
+echo "${r}" | egrep -q "verified" || echo "/status failed: ${r}"
+
+
+ln="badrequest"
+hcn="111-111-111"
+bd="2001-01-01"
+r=$(http --print=hb --json PUT "${api}/test-result" lastName="${ln}" healthCareNumber="$hcn" | tr -d "\r\n")
+echo "${r}" | egrep -q "400 Bad Request" || echo "/test-result for ${ln} failed: ${r}"
+
+ln="notfound"
+hcn="111-111-111"
+bd="2001-01-01"
+r=$(http --print=hb --json PUT "${api}/test-result" lastName="${ln}" healthCareNumber="$hcn" birthDate="$bd" | tr -d "\r\n")
+echo "${r}" | egrep -q "404 Not Found" || echo "/test-result for ${ln} failed: ${r}"
+
+ln="tiger"
+hcn="002-003-004"
+bd="1963-10-24"
+r=$(http --print=hb --json PUT "${api}/test-result" lastName="${ln}" healthCareNumber="$hcn" birthDate="$bd" | tr -d "\r\n")
+echo "${r}" | egrep -q "200 OK" || echo "/test-result for ${ln} failed: ${r}"
+echo "${r}" | egrep -q '"result":"Negative"' || echo "/test-result for ${ln} failed: ${r}"
+echo "${r}" | egrep -q '"collectionTimestamp":"2020-10-07' || echo "/test-result for ${ln} failed: ${r}"
+echo "${r}" | egrep -q '"resultEnteredTimestamp":"2020-11-03' || echo "/test-result for ${ln} failed: ${r}"
+
+ln="GHOST"
+hcn="012-639-052"
+bd="1953-02-01"
+r=$(http --print=hb --json PUT "${api}/test-result" lastName="${ln}" healthCareNumber="$hcn" birthDate="$bd" | tr -d "\r\n")
+echo "${r}" | egrep -q "204 No Content" || echo "/test-result for ${ln} failed: ${r}"
+
+ln="Dark"
+hcn="002-644-079"
+bd="1991-05-29"
+r=$(http --print=hb --json PUT "${api}/test-result" lastName="${ln}" healthCareNumber="$hcn" birthDate="$bd" | tr -d "\r\n")
+echo "${r}" | egrep -q "200 OK" || echo "/test-result for ${ln} failed: ${r}"
+echo "${r}" | egrep -q '"result":"Negative"' || echo "/test-result for ${ln} failed: ${r}"
+
+ln="lynx"
+hcn="002-655-988"
+bd="1965-02-02"
+r=$(http --print=hb --json PUT "${api}/test-result" lastName="${ln}" healthCareNumber="$hcn" birthDate="$bd" | tr -d "\r\n")
+echo "${r}" | egrep -q "204 No Content" || echo "/test-result for ${ln} failed: ${r}"
+
+ln="crackers"
+hcn="002-963-852"
+bd="2000-07-15"
+r=$(http --print=hb --json PUT "${api}/test-result" lastName="${ln}" healthCareNumber="$hcn" birthDate="$bd" | tr -d "\r\n")
+echo "${r}" | egrep -q "204 No Content" || echo "/test-result for ${ln} failed: ${r}"
+
+ln="woman"
+hcn="003-008-009"
+bd="1996-01-01"
+r=$(http --print=hb --json PUT "${api}/test-result" lastName="${ln}" healthCareNumber="$hcn" birthDate="$bd" | tr -d "\r\n")
+echo "${r}" | egrep -q "200 OK" || echo "/test-result for ${ln} failed: ${r}"
+echo "${r}" | egrep -q '"result":"Negative"' || echo "/test-result for ${ln} failed: ${r}"
+
+
+ln="badrequest"
+hcn="111-111-111"
+bd="2001-01-01"
+r=$(http --print=hb --json PUT "${api}/notification-request" lastName="${ln}" healthCareNumber="$hcn" birthDate="$bd" | tr -d "\r\n")
+echo "${r}" | egrep -q "400 Bad Request" || echo "/notification-request for ${ln} failed: ${r}"
+
+ln="notfound"
+hcn="111-111-111"
+bd="2001-01-01"
+nt="555-0111"
+pl="en"
+r=$(http --print=hb --json PUT "${api}/notification-request" lastName="${ln}" healthCareNumber="$hcn" birthDate="$bd" notificationTelephone="${nt}" preferredLanguage="${pl}" | tr -d "\r\n")
+echo "${r}" | egrep -q "404 Not Found" || echo "/notification-request for ${ln} failed: ${r}"
+
+ln="GHOST"
+hcn="012-639-052"
+bd="1953-02-01"
+nt="555-0112"
+pl="en"
+r=$(http --print=hb --json PUT "${api}/notification-request" lastName="${ln}" healthCareNumber="$hcn" birthDate="$bd" notificationTelephone="${nt}" preferredLanguage="${pl}" | tr -d "\r\n")
+echo "${r}" | egrep -q "200 OK" || echo "/notification-request for ${ln} failed: ${r}"
+echo "${r}" | egrep -q 'SMS notification has been requested.' || echo "/notification-request for ${ln} failed: ${r}"
+
+ln="Dark"
+hcn="002-644-079"
+bd="1991-05-29"
+nt="555-0113"
+pl="fr"
+r=$(http --print=hb --json PUT "${api}/notification-request" lastName="${ln}" healthCareNumber="$hcn" birthDate="$bd" notificationTelephone="${nt}" preferredLanguage="${pl}" | tr -d "\r\n")
+echo "${r}" | egrep -q "200 OK" || echo "/notification-request for ${ln} failed: ${r}"
+echo "${r}" | egrep -q 'SMS notification has been requested.' || echo "/notification-request for ${ln} failed: ${r}"
+
+ln="lynx"
+hcn="002-655-988"
+bd="1965-02-02"
+nt="555-0114"
+pl="fr"
+r=$(http --print=hb --json PUT "${api}/notification-request" lastName="${ln}" healthCareNumber="$hcn" birthDate="$bd" notificationTelephone="${nt}" preferredLanguage="${pl}" | tr -d "\r\n")
+echo "${r}" | egrep -q "200 OK" || echo "/notification-request for ${ln} failed: ${r}"
+echo "${r}" | egrep -q 'SMS notification has been requested.' || echo "/notification-request for ${ln} failed: ${r}"
+
+ln="woman"
+hcn="003-008-009"
+bd="1996-01-01"
+nt="555-0115"
+pl="fr"
+r=$(http --print=hb --json PUT "${api}/notification-request" lastName="${ln}" healthCareNumber="$hcn" birthDate="$bd" notificationTelephone="${nt}" preferredLanguage="${pl}" | tr -d "\r\n")
+echo "${r}" | egrep -q "200 OK" || echo "/notification-request for ${ln} failed: ${r}"
+echo "${r}" | egrep -q 'SMS notification has been requested.' || echo "/notification-request for ${ln} failed: ${r}"
+
+ln="crackers"
+hcn="002-963-852"
+bd="2000-07-15"
+nt="555-0116"
+pl="de"
+r=$(http --print=hb --json PUT "${api}/notification-request" lastName="${ln}" healthCareNumber="$hcn" birthDate="$bd" notificationTelephone="${nt}" preferredLanguage="${pl}" | tr -d "\r\n")
+echo "${r}" | egrep -q "200 OK" || echo "/notification-request for ${ln} failed: ${r}"
+echo "${r}" | egrep -q 'SMS notification has been requested.' || echo "/notification-request for ${ln} failed: ${r}"
+
+
+r=$(http --print=hb "${api}/to-notify" | tr -d "\r\n")
+echo "${r}" | egrep -q "200 OK" || echo "/to-notify failed: ${r}"
+echo "${r}" | egrep -q "555-0111" && echo "/to-notify failed: ${r}"
+echo "${r}" | egrep -q "555-0112" && echo "/to-notify failed: ${r}"
+echo "${r}" | egrep -q "555-0113" || echo "/to-notify failed: ${r}"
+echo "${r}" | egrep -q "555-0114" && echo "/to-notify failed: ${r}"
+echo "${r}" | egrep -q "555-0115" || echo "/to-notify failed: ${r}"
+echo "${r}" | egrep -q "555-0116" && echo "/to-notify failed: ${r}"
