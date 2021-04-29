@@ -82,7 +82,8 @@ app.get('/status', async (req, res) => {
   const mssqlDb = req.app.get('mssqlDb')
 
   try {
-    const rows = await mssqlDb.select('PatientName', 'DOB', 'CollectionDateTime', 'ResultedDateTime', 'Result', 'SpecimenID')
+    const rows = await mssqlDb
+      .select('PatientName', 'DOB', 'CollectionDateTime', 'ResultedDateTime', 'Result', 'SpecimenID')
       .from('CovidTestResults')
       .limit(5)
 
@@ -95,6 +96,59 @@ app.get('/status', async (req, res) => {
     res.status(200).send(msg)
   } catch (err) {
     const msg = `Attempt to verify API status failed: ${err}`
+    console.error(msg)
+    res.status(500).send(msg)
+  }
+})
+
+// Verify that recently (in the past week) logged negative results were correctly
+// interpreted.
+app.get('/verify-negative-results', async (req, res) => {
+  // const mssqlDb = req.app.get('mssqlDb')
+  try {
+    console.log('Verifying recently logged negative results.')
+    const sqliteDb = req.app.get('sqliteDb')
+
+    const recentNegativeResults = await sqliteDb
+      .select('specimenId', 'viewedTime')
+      .from('viewed_result')
+      .where('viewedTime', '>', moment().subtract(7, 'days').toDate())
+      .orderBy('viewedTime')
+
+    const mssqlDb = req.app.get('mssqlDb')
+    let isVerified = true
+
+    /** @namespace recentNegativeResult.specimenId **/
+    /** @namespace recentNegativeResult.viewedTime **/
+    for (const recentNegativeResult of recentNegativeResults) {
+      const specimenId = recentNegativeResult.specimenId
+      const viewedTime = recentNegativeResult.viewedTime
+
+      const row = await mssqlDb('CovidTestResults')
+        .first('Result')
+        .where('SpecimenId', '=', specimenId)
+        .where('ResultedDateTime', '<', viewedTime)
+        .orderBy('CollectionDateTime', 'DESC')
+        .orderByRaw('COALESCE(ResultedDateTime, CURRENT_TIMESTAMP) DESC')
+
+      if (!isNegativeTestResult(row.Result)) {
+        isVerified = false
+        console.error(`Result for specimen ID '${specimenId}' viewed at '${viewedTime}' is not Negative.`)
+      }
+    }
+
+    let statusMsg = 'Recently logged negative results verified.'
+    let statusCode = 200
+
+    if (!isVerified) {
+      statusMsg = 'Recently logged negative results could not be verified.'
+      statusCode = 400
+    }
+
+    console.log(statusMsg)
+    res.status(statusCode).send(statusMsg)
+  } catch (err) {
+    const msg = `Attempt to verify recent negative results failed: ${err}`
     console.error(msg)
     res.status(500).send(msg)
   }
@@ -118,7 +172,8 @@ app.put('/test-result', async (req, res) => {
   const mssqlDb = req.app.get('mssqlDb')
 
   try {
-    const rows = await mssqlDb.select('PatientName', 'DOB', 'CollectionDateTime', 'ResultedDateTime', 'Result', 'SpecimenID')
+    const rows = await mssqlDb
+      .select('PatientName', 'DOB', 'CollectionDateTime', 'ResultedDateTime', 'Result', 'SpecimenID')
       .from('CovidTestResults')
       .where('HCN', healthCareNumber)
       .where('DOB', dob)
@@ -200,7 +255,8 @@ app.put('/notification-request', async (req, res) => {
   const mssqlDb = req.app.get('mssqlDb')
 
   try {
-    const rows = await mssqlDb.select('SpecimenID')
+    const rows = await mssqlDb
+      .select('SpecimenID')
       .from('CovidTestResults')
       .where('HCN', healthCareNumber)
       .where('DOB', dob)
