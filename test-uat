@@ -137,3 +137,8 @@ echo "${r}" | egrep -q "555-0113" || echo "/to-notify failed: ${r}"
 echo "${r}" | egrep -q "555-0114" && echo "/to-notify failed: ${r}"
 echo "${r}" | egrep -q "555-0115" || echo "/to-notify failed: ${r}"
 echo "${r}" | egrep -q "555-0116" && echo "/to-notify failed: ${r}"
+
+
+r=$(http --print=hb "${api}/verify-negative-results" | tr -d "\r\n")
+echo "${r}" | egrep -q "200 OK" || echo "/verify-negative-results failed: ${r}"
+echo "${r}" | egrep -q "verified" || echo "/verify-negative-results failed: ${r}"
